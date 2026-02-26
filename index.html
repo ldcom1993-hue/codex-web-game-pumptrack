@@ -21,6 +21,15 @@
 
       <section id="hud" class="hud hidden" aria-live="polite">
         <div class="pill">Speed <span id="speedValue">0</span> m/s</div>
+        <div class="pill">Time <span id="timerValue">00:00.00</span></div>
+      </section>
+
+      <section id="progressHud" class="progress-hud hidden" aria-hidden="true">
+        <div id="progressBar" class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+          <div id="progressDot" class="progress-dot"></div>
+          <div id="checkpointMarks" class="checkpoint-marks"></div>
+        </div>
       </section>
 
       <section id="startScreen" class="overlay visible">
@@ -40,6 +49,7 @@
         <div class="card">
           <h2 id="gameOverTitle">Ride Complete</h2>
           <p>Final score: <strong id="finalScore">0</strong></p>
+          <p>Final time: <strong id="finalTime">00:00.00</strong></p>
           <button id="restartButton" class="btn">Ride Again</button>
         </div>
       </section>
