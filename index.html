@@ -12,6 +12,13 @@
     <main class="app-shell">
       <canvas id="gameCanvas" aria-label="Pumptrack game"></canvas>
 
+      <section id="rotateNotice" class="rotate-notice" aria-live="polite">
+        <div class="card rotate-card">
+          <h2>Rotate Device</h2>
+          <p>This ride is built for landscape mode. Rotate your phone to continue.</p>
+        </div>
+      </section>
+
       <section id="hud" class="hud hidden" aria-live="polite">
         <div class="pill">Speed <span id="speedValue">0</span></div>
         <div class="pill">Score <span id="scoreValue">0</span></div>

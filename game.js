@@ -8,6 +8,7 @@ const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
 const finalScore = document.getElementById("finalScore");
 const feedback = document.getElementById("feedback");
+const rotateNotice = document.getElementById("rotateNotice");
 
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
@@ -17,25 +18,30 @@ const state = {
   over: false,
   t: 0,
   worldX: 0,
-  speed: 4.4,
-  vx: 4.4,
+  vx: 2.6,
   vy: 0,
   riderY: 0,
   airborne: false,
   pumping: false,
   score: 0,
   streak: 0,
-  remainingTime: 60,
+  remainingTime: 70,
   trickWindow: 0,
   justLanded: false,
+  spring: 0,
+  springV: 0,
+  displaySpeed: 0,
+  orientationBlocked: false,
 };
 
-const gravity = 0.6;
-const pumpForce = 0.035;
-const slopeBoost = 0.08;
-const drag = 0.005;
-const minSpeed = 2.2;
-const maxSpeed = 12;
+const gravity = 0.42;
+const baseDrive = 0.003;
+const pumpForce = 0.02;
+const slopeAssist = 0.028;
+const drag = 0.0038;
+const rollingResistance = 0.0016;
+const minSpeed = 2.0;
+const maxSpeed = 8.6;
 
 let width = 0;
 let height = 0;
@@ -53,18 +59,31 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
+function isLandscape() {
+  return window.matchMedia("(orientation: landscape)").matches;
+}
+
+function handleOrientation() {
+  const blocked = !isLandscape();
+  state.orientationBlocked = blocked;
+  rotateNotice.classList.toggle("visible", blocked);
+  if (blocked) {
+    state.pumping = false;
+  }
+}
+
 function terrainY(worldX) {
-  const base = height * 0.62;
+  const base = height * 0.67;
   return (
     base +
-    Math.sin(worldX * 0.016) * 74 +
-    Math.sin(worldX * 0.031 + 1.2) * 26 +
-    Math.sin(worldX * 0.006) * 18
+    Math.sin(worldX * 0.0068) * 56 +
+    Math.sin(worldX * 0.0032 + 0.8) * 30 +
+    Math.sin(worldX * 0.0016 + 2.4) * 14
   );
 }
 
 function terrainSlope(worldX) {
-  const dx = 2;
+  const dx = 8;
   return (terrainY(worldX + dx) - terrainY(worldX - dx)) / (dx * 2);
 }
 
@@ -72,24 +91,26 @@ function showFeedback(text) {
   feedback.textContent = text;
   feedback.classList.add("visible");
   clearTimeout(showFeedback.timer);
-  showFeedback.timer = setTimeout(() => feedback.classList.remove("visible"), 700);
+  showFeedback.timer = setTimeout(() => feedback.classList.remove("visible"), 780);
 }
 
 function startGame() {
   state.running = true;
   state.over = false;
   state.worldX = 0;
-  state.speed = 4.4;
-  state.vx = 4.4;
+  state.vx = 2.6;
   state.vy = 0;
   state.riderY = terrainY(0) - 18;
   state.airborne = false;
   state.pumping = false;
   state.score = 0;
   state.streak = 0;
-  state.remainingTime = 60;
+  state.remainingTime = 70;
   state.trickWindow = 0;
   state.justLanded = false;
+  state.spring = 0;
+  state.springV = 0;
+  state.displaySpeed = 0;
 
   startScreen.classList.remove("visible");
   gameOverScreen.classList.remove("visible");
@@ -105,24 +126,25 @@ function endGame() {
 }
 
 function onPress(active) {
-  if (!state.running) return;
+  if (!state.running || state.orientationBlocked) return;
+
   if (!state.airborne) {
     state.pumping = active;
     if (!active && state.trickWindow > 0) {
       state.airborne = true;
-      state.vy = -7 - Math.min(2.2, state.speed * 0.12);
+      state.vy = -5.6 - Math.min(1.2, state.vx * 0.08);
       state.streak += 1;
-      state.score += 50 * state.streak;
-      showFeedback(`Pop! x${state.streak}`);
+      state.score += 35 * state.streak;
+      showFeedback(`Float x${state.streak}`);
     }
   } else if (active) {
-    state.score += 8;
-    showFeedback("Style +8");
+    state.score += 6;
+    showFeedback("Style +6");
   }
 }
 
 function update(dt) {
-  if (!state.running) return;
+  if (!state.running || state.orientationBlocked) return;
 
   state.remainingTime -= dt;
   if (state.remainingTime <= 0) {
@@ -130,92 +152,103 @@ function update(dt) {
     return;
   }
 
-  const frontWheelX = state.worldX + 14;
+  const frontWheelX = state.worldX + 18;
   const groundY = terrainY(frontWheelX);
   const slope = terrainSlope(frontWheelX);
   const downhill = Math.max(0, slope);
+  const uphill = Math.max(0, -slope);
 
   if (!state.airborne) {
-    state.vx += downhill * slopeBoost;
+    state.vx += baseDrive;
+    state.vx += downhill * slopeAssist;
+    state.vx -= uphill * rollingResistance;
 
     if (state.pumping) {
-      state.vx += downhill * pumpForce + 0.015;
-      state.score += (0.35 + downhill * 1.5) * dt * 60;
+      state.vx += 0.006 + downhill * pumpForce;
+      state.springV += 0.028;
+      state.score += (0.24 + downhill * 0.8) * dt * 60;
     } else {
       state.vx -= drag;
+      state.springV -= 0.012;
     }
 
     state.vx = Math.max(minSpeed, Math.min(maxSpeed, state.vx));
     state.worldX += state.vx;
     state.riderY = groundY - 18;
 
-    state.trickWindow = slope < -0.25 ? 0.16 : Math.max(0, state.trickWindow - dt);
+    state.trickWindow = slope < -0.16 ? 0.18 : Math.max(0, state.trickWindow - dt);
 
     if (state.justLanded) {
-      state.score += 25 * Math.max(1, state.streak);
-      showFeedback("Smooth landing");
+      state.score += 20 * Math.max(1, state.streak);
+      showFeedback("Clean landing");
       state.justLanded = false;
     }
   } else {
     state.vy += gravity;
-    state.worldX += state.vx * 0.94;
+    state.worldX += state.vx * 0.92;
     state.riderY += state.vy;
 
-    const landingGround = terrainY(state.worldX + 14);
+    const landingGround = terrainY(state.worldX + 18);
     if (state.riderY >= landingGround - 18) {
       state.riderY = landingGround - 18;
       state.airborne = false;
       state.vy = 0;
       state.justLanded = true;
-      state.vx = Math.max(minSpeed, state.vx - 0.3);
+      state.vx = Math.max(minSpeed, state.vx - 0.16);
+      state.springV -= 0.08;
     }
   }
 
-  state.score += state.vx * dt * 4;
-  speedValue.textContent = state.vx.toFixed(1);
+  state.springV += (-state.spring * 13 - state.springV * 5.2) * dt;
+  state.spring += state.springV * dt;
+
+  state.displaySpeed += (state.vx - state.displaySpeed) * Math.min(1, dt * 6);
+
+  state.score += state.vx * dt * 3.3;
+  speedValue.textContent = state.displaySpeed.toFixed(1);
   scoreValue.textContent = Math.round(state.score);
 }
 
 function drawBackground() {
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, "#121c3a");
-  grad.addColorStop(1, "#090d1a");
+  grad.addColorStop(0, "#101a35");
+  grad.addColorStop(1, "#090e1d");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = "rgba(126, 231, 255, 0.08)";
+  ctx.fillStyle = "rgba(126, 231, 255, 0.06)";
   for (let i = 0; i < 4; i++) {
-    const y = (height * 0.15) + i * 80 + Math.sin(state.t * 0.001 + i) * 16;
+    const y = height * 0.16 + i * 88 + Math.sin(state.t * 0.0005 + i * 0.8) * 12;
     ctx.fillRect(0, y, width, 2);
   }
 }
 
 function drawTrack() {
-  const screenPlayerX = width * 0.34;
-  const startX = state.worldX - screenPlayerX - 40;
-  const endX = startX + width + 80;
+  const screenPlayerX = width * 0.3;
+  const startX = state.worldX - screenPlayerX - 80;
+  const endX = startX + width + 160;
 
   ctx.beginPath();
-  for (let x = 0; x <= width + 80; x += 8) {
+  for (let x = 0; x <= width + 160; x += 10) {
     const worldX = startX + x;
     const y = terrainY(worldX);
-    if (x === 0) ctx.moveTo(-40, y);
-    else ctx.lineTo(x - 40, y);
+    if (x === 0) ctx.moveTo(-80, y);
+    else ctx.lineTo(x - 80, y);
   }
 
-  ctx.lineTo(width + 40, height + 60);
-  ctx.lineTo(-40, height + 60);
+  ctx.lineTo(width + 80, height + 80);
+  ctx.lineTo(-80, height + 80);
   ctx.closePath();
 
-  const fillGrad = ctx.createLinearGradient(0, height * 0.35, 0, height);
-  fillGrad.addColorStop(0, "#27356a");
-  fillGrad.addColorStop(1, "#101731");
+  const fillGrad = ctx.createLinearGradient(0, height * 0.4, 0, height);
+  fillGrad.addColorStop(0, "#243260");
+  fillGrad.addColorStop(1, "#0f1730");
   ctx.fillStyle = fillGrad;
   ctx.fill();
 
   ctx.beginPath();
-  for (let worldX = startX; worldX <= endX; worldX += 4) {
-    const x = worldX - startX - 40;
+  for (let worldX = startX; worldX <= endX; worldX += 6) {
+    const x = worldX - startX - 80;
     const y = terrainY(worldX);
     if (worldX === startX) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
@@ -226,47 +259,48 @@ function drawTrack() {
 }
 
 function drawRider() {
-  const playerScreenX = width * 0.34;
-  const slope = terrainSlope(state.worldX + 14);
-  const lean = Math.max(-0.45, Math.min(0.45, slope * 0.55 + (state.pumping ? 0.18 : 0)));
+  const playerScreenX = width * 0.3;
+  const slope = terrainSlope(state.worldX + 18);
+  const slopeLean = Math.max(-0.33, Math.min(0.33, slope * 0.44));
+  const pumpLean = state.pumping ? 0.1 : 0;
+  const airLean = state.airborne ? state.vy * 0.02 : 0;
+  const lean = slopeLean + pumpLean + airLean;
+  const compress = Math.max(-6, Math.min(6, state.spring * 140));
 
   ctx.save();
-  ctx.translate(playerScreenX, state.riderY);
+  ctx.translate(playerScreenX, state.riderY + compress);
+  ctx.rotate(lean);
 
-  if (!state.airborne) {
-    ctx.rotate(lean);
-  } else {
-    ctx.rotate(lean + state.vy * 0.035);
-  }
+  const torsoTilt = state.airborne ? -1 : 0;
 
   ctx.fillStyle = "#d9e7ff";
   ctx.beginPath();
-  ctx.arc(0, -22, 8, 0, Math.PI * 2);
+  ctx.arc(0, -22 + torsoTilt, 8, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = "#7ee7ff";
   ctx.lineWidth = 5;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(0, -14);
-  ctx.lineTo(0, 3);
+  ctx.moveTo(0, -14 + torsoTilt);
+  ctx.lineTo(0, 4);
   ctx.stroke();
 
   ctx.strokeStyle = "#9dafff";
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(0, -8);
-  ctx.lineTo(10, -2);
-  ctx.moveTo(0, 3);
-  ctx.lineTo(-8, 12);
-  ctx.lineTo(11, 13);
+  ctx.moveTo(0, -7 + torsoTilt);
+  ctx.lineTo(11, -1);
+  ctx.moveTo(0, 4);
+  ctx.lineTo(-8, 13);
+  ctx.lineTo(11, 14);
   ctx.stroke();
 
   ctx.strokeStyle = "#ecf3ff";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(-14, 14);
-  ctx.lineTo(15, 14);
+  ctx.moveTo(-15, 14);
+  ctx.lineTo(16, 14);
   ctx.stroke();
 
   ctx.restore();
@@ -284,11 +318,15 @@ function frame(ts) {
   lastTime = ts;
   state.t = ts;
 
+  handleOrientation();
   update(dt);
   drawBackground();
-  drawTrack();
-  drawRider();
-  if (state.running) drawTimer();
+
+  if (!state.orientationBlocked) {
+    drawTrack();
+    drawRider();
+    if (state.running) drawTimer();
+  }
 
   requestAnimationFrame(frame);
 }
@@ -299,7 +337,10 @@ restartButton.addEventListener("click", startGame);
 window.addEventListener("pointerdown", () => onPress(true), { passive: true });
 window.addEventListener("pointerup", () => onPress(false), { passive: true });
 window.addEventListener("pointercancel", () => onPress(false), { passive: true });
-window.addEventListener("resize", resize);
+window.addEventListener("resize", () => {
+  resize();
+  handleOrientation();
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
@@ -312,4 +353,5 @@ if ("serviceWorker" in navigator) {
 }
 
 resize();
+handleOrientation();
 requestAnimationFrame(frame);

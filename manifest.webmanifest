@@ -3,7 +3,7 @@
   "short_name": "PumpFlow",
   "description": "A minimalist mobile pumptrack rhythm riding game.",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "landscape",
   "start_url": "./",
   "scope": "./",
   "background_color": "#0b1020",

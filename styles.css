@@ -131,3 +131,35 @@ p {
   opacity: 0;
   pointer-events: none;
 }
+
+
+.rotate-notice {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 10, 22, 0.84);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+}
+
+.rotate-notice.visible {
+  display: grid;
+}
+
+.rotate-card {
+  text-align: center;
+}
+
+@media (orientation: portrait) {
+  .hud,
+  .feedback,
+  #gameCanvas {
+    display: none;
+  }
+
+  .overlay {
+    display: none;
+  }
+}
