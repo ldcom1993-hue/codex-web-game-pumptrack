@@ -6,11 +6,11 @@
     <meta name="theme-color" content="#0b1020" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
-    <title>Pump Flow</title>
+    <title>Flowline Rider</title>
   </head>
   <body>
     <main class="app-shell">
-      <canvas id="gameCanvas" aria-label="Pumptrack game"></canvas>
+      <canvas id="gameCanvas" aria-label="Flowline rider game"></canvas>
 
       <section id="rotateNotice" class="rotate-notice" aria-live="polite">
         <div class="card rotate-card">
@@ -20,16 +20,28 @@
       </section>
 
       <section id="hud" class="hud hidden" aria-live="polite">
-        <div class="pill">Speed <span id="speedValue">0</span></div>
-        <div class="pill">Score <span id="scoreValue">0</span></div>
+        <div class="pill">Speed <span id="speedValue">0</span> m/s</div>
+        <div class="charge-panel">
+          <div class="charge-header">
+            <span>Jump Charge</span>
+            <span id="chargeValue">0%</span>
+          </div>
+          <div class="charge-track" role="img" aria-label="Jump charge meter">
+            <div class="charge-zone zone-red"></div>
+            <div class="charge-zone zone-yellow"></div>
+            <div class="charge-zone zone-green"></div>
+            <div id="chargeFill" class="charge-fill"></div>
+            <div id="chargeMarker" class="charge-marker"></div>
+          </div>
+        </div>
       </section>
 
       <section id="startScreen" class="overlay visible">
         <div class="card">
-          <h1>Pump Flow</h1>
+          <h1>Flowline Rider</h1>
           <p>
-            Hold on downslopes to pump for speed. Release and tap near crests to jump and land clean for
-            bonus flow.
+            Hold to pedal and charge your jump. Release to pop. Release inside the green zone for a
+            Perfect boost, then tap in the air to flip.
           </p>
           <button id="startButton" class="btn">Start Ride</button>
         </div>
@@ -39,7 +51,7 @@
 
       <section id="gameOver" class="overlay">
         <div class="card">
-          <h2>Ride Complete</h2>
+          <h2 id="gameOverTitle">Ride Complete</h2>
           <p>Final score: <strong id="finalScore">0</strong></p>
           <button id="restartButton" class="btn">Ride Again</button>
         </div>

@@ -7,6 +7,8 @@
   --text: #ecf3ff;
   --muted: #9cadcf;
   --good: #4cffb0;
+  --warn: #ffd96a;
+  --bad: #ff6e6e;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -42,6 +44,7 @@ body {
   position: absolute;
   inset: calc(env(safe-area-inset-top) + 12px) 12px auto 12px;
   display: flex;
+  align-items: stretch;
   justify-content: space-between;
   gap: 10px;
   transition: opacity 220ms ease;
@@ -55,6 +58,71 @@ body {
   font-size: 0.92rem;
   min-width: 120px;
   box-shadow: var(--shadow);
+}
+
+.charge-panel {
+  flex: 1;
+  max-width: 360px;
+  min-width: 180px;
+  background: color-mix(in oklab, var(--surface), #ffffff 6%);
+  border: 1px solid color-mix(in oklab, var(--muted), transparent 70%);
+  border-radius: 14px;
+  padding: 9px 12px 12px;
+  box-shadow: var(--shadow);
+}
+
+.charge-header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 8px;
+}
+
+.charge-track {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--muted), transparent 65%);
+  display: flex;
+}
+
+.charge-zone {
+  height: 100%;
+}
+
+.zone-red {
+  width: 35%;
+  background: color-mix(in oklab, var(--bad), #000 15%);
+}
+
+.zone-yellow {
+  width: 40%;
+  background: color-mix(in oklab, var(--warn), #000 20%);
+}
+
+.zone-green {
+  width: 25%;
+  background: color-mix(in oklab, var(--good), #000 18%);
+}
+
+.charge-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.1));
+  transition: width 50ms linear;
+}
+
+.charge-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 0%;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
 }
 
 .overlay {
@@ -110,16 +178,17 @@ p {
 .feedback {
   position: absolute;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 34px);
+  bottom: calc(env(safe-area-inset-bottom) + 28px);
   transform: translateX(-50%) translateY(14px);
-  padding: 10px 14px;
+  padding: 10px 16px;
   border-radius: 12px;
   background: color-mix(in oklab, var(--surface), #ffffff 4%);
   border: 1px solid color-mix(in oklab, var(--good), transparent 60%);
   color: var(--good);
   opacity: 0;
   transition: opacity 220ms ease, transform 220ms ease;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .feedback.visible {
@@ -127,11 +196,20 @@ p {
   transform: translateX(-50%) translateY(0);
 }
 
+.feedback.crash {
+  color: var(--bad);
+  border-color: color-mix(in oklab, var(--bad), transparent 55%);
+}
+
+.feedback.perfect {
+  color: var(--good);
+  border-color: color-mix(in oklab, var(--good), transparent 48%);
+}
+
 .hidden {
   opacity: 0;
   pointer-events: none;
 }
-
 
 .rotate-notice {
   position: absolute;
@@ -155,10 +233,7 @@ p {
 @media (orientation: portrait) {
   .hud,
   .feedback,
-  #gameCanvas {
-    display: none;
-  }
-
+  #gameCanvas,
   .overlay {
     display: none;
   }
