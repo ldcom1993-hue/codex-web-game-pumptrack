@@ -19,8 +19,14 @@ const rotateNotice = document.getElementById("rotateNotice");
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
 
-const LEVEL_LENGTH = 800;
-const CHECKPOINT_SPACING = 80;
+const WORLD_SCALE = {
+  metersPerRiderHeight: 1.7,
+  metersPerWheelDiameter: 0.7,
+};
+
+
+const LEVEL_LENGTH = 760;
+const CHECKPOINT_SPACING = 160;
 const checkpoints = Array.from({ length: Math.floor(LEVEL_LENGTH / CHECKPOINT_SPACING) }, (_, index) => {
   const x = (index + 1) * CHECKPOINT_SPACING;
   return {
@@ -32,14 +38,14 @@ const checkpoints = Array.from({ length: Math.floor(LEVEL_LENGTH / CHECKPOINT_SP
 });
 
 const physics = {
-  gravity: 12.6,
-  pedalAccelMin: 0.5,
-  pedalAccelMid: 0.9,
-  pedalAccelMax: 1.55,
-  rollingFriction: 0.35,
-  airDrag: 0.09,
-  minSpeed: 0.16,
-  maxSpeed: 15,
+  gravity: 18.8,
+  pedalAccelMin: 0.85,
+  pedalAccelMid: 1.75,
+  pedalAccelMax: 2.85,
+  rollingFriction: 0.16,
+  airDrag: 0.045,
+  minSpeed: 0.55,
+  maxSpeed: 18,
   maxVisibleJumpVy: 14,
   chargeCapSeconds: 1.5,
   jumpBaseImpulse: 6.4,
@@ -57,10 +63,10 @@ const physics = {
 };
 
 const rider = {
-  wheelRadius: 11,
-  wheelBase: 42,
-  bodyHeight: 23,
-  comHeight: 27,
+  wheelRadius: 10,
+  wheelBase: 38,
+  bodyHeight: 20,
+  comHeight: 24,
 };
 
 const camera = {
@@ -78,7 +84,7 @@ const state = {
   crashFlash: 0,
   worldX: 0,
   riderY: 0,
-  vx: 4.2,
+  vx: 5.6,
   vy: 0,
   airborne: false,
   holdActive: false,
@@ -103,13 +109,13 @@ const state = {
     x: 0,
     y: 0,
     angle: 0,
-    speed: 4.2,
+    speed: 5.6,
   },
 };
 
 const terrainConfig = {
-  minSegmentLength: 20,
-  maxSegmentLength: 80,
+  minSegmentLength: 22,
+  maxSegmentLength: 78,
 };
 
 let terrainSegments = [];
@@ -150,10 +156,10 @@ function seededRandom(seed) {
 
 function pickSlope(rand, index) {
   const pattern = index % 6;
-  if (pattern === 0) return (rand() - 0.5) * 0.05;
-  if (pattern === 1 || pattern === 2) return -(0.05 + rand() * 0.12);
-  if (pattern === 3 || pattern === 4) return 0.07 + rand() * 0.13;
-  return (rand() - 0.5) * 0.11;
+  if (pattern === 0) return (rand() - 0.5) * 0.08;
+  if (pattern === 1 || pattern === 2) return -(0.06 + rand() * 0.1);
+  if (pattern === 3 || pattern === 4) return 0.08 + rand() * 0.12;
+  return (rand() - 0.5) * 0.14;
 }
 
 function buildTerrainSegments() {
@@ -165,17 +171,17 @@ function buildTerrainSegments() {
 
   while (x < LEVEL_LENGTH) {
     const slope = pickSlope(rand, index);
-    const minLen = slope > 0.06 ? 28 : terrainConfig.minSegmentLength;
-    const maxLen = slope < -0.04 ? terrainConfig.maxSegmentLength : 60;
+    const minLen = slope > 0.1 ? 34 : terrainConfig.minSegmentLength;
+    const maxLen = slope < -0.08 ? terrainConfig.maxSegmentLength : 66;
     const length = Math.min(LEVEL_LENGTH - x, minLen + rand() * (maxLen - minLen));
 
     const startX = x;
     const startElevation = elevation;
     let endElevation = startElevation + slope * length;
-    endElevation = Math.max(-140, Math.min(140, endElevation));
+    endElevation = Math.max(-260, Math.min(260, endElevation));
 
-    const waveAmp = index % 5 === 2 ? 0 : 1 + rand() * 3.4;
-    const waveCycles = 0.5 + rand() * 1.4;
+    const waveAmp = index % 4 === 2 ? 0 : 12 + rand() * 18;
+    const waveCycles = 0.22 + rand() * 0.45;
     const phase = rand() * Math.PI * 2;
 
     terrainSegments.push({
@@ -210,7 +216,7 @@ function terrainElevation(worldX) {
 }
 
 function terrainSlope(worldX) {
-  const dx = 8;
+  const dx = 10;
   return (terrainY(worldX + dx) - terrainY(worldX - dx)) / (2 * dx);
 }
 
@@ -288,7 +294,7 @@ function resetRun() {
     x: 0,
     y: state.riderY,
     angle: startAngle,
-    speed: 4.2,
+    speed: 5.6,
   };
 
   camera.x = 0;
@@ -424,10 +430,10 @@ function updateGroundPhysics(dt) {
   if (state.pedaling) {
     const pedalTime = state.charge;
     let pedalAccel = physics.pedalAccelMin;
-    if (pedalTime > 1) {
+    if (pedalTime > 1.05) {
       pedalAccel = physics.pedalAccelMax;
-    } else if (pedalTime > 0.3) {
-      const midBlend = (pedalTime - 0.3) / 0.7;
+    } else if (pedalTime > 0.25) {
+      const midBlend = (pedalTime - 0.25) / 0.8;
       pedalAccel = physics.pedalAccelMid + (physics.pedalAccelMax - physics.pedalAccelMid) * Math.max(0, Math.min(1, midBlend));
     }
     state.vx += pedalAccel * dt;
@@ -539,7 +545,7 @@ function updateCheckpointState() {
 }
 
 function updateCamera(dt) {
-  const lookAhead = 28 + state.vx * 3.2;
+  const lookAhead = 34 + state.vx * 3.8;
   const targetX = Math.min(LEVEL_LENGTH, state.worldX + lookAhead);
   const jumpLift = state.airborne ? -36 - Math.min(40, Math.abs(state.vy) * 2.8) : 0;
   const targetY = state.riderY + jumpLift;
