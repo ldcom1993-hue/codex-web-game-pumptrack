@@ -32,6 +32,23 @@
         </div>
       </section>
 
+      <button id="tuningToggle" class="tuning-toggle" type="button" aria-label="Open tuning panel">⚙</button>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.10.2</p>
+
+      <section id="tuningPanel" class="tuning-panel" aria-hidden="true">
+        <div class="tuning-card" role="dialog" aria-modal="true" aria-labelledby="tuningTitle">
+          <div class="tuning-header">
+            <h2 id="tuningTitle">Gameplay Tuning</h2>
+            <button id="tuningClose" class="icon-btn" type="button" aria-label="Close tuning panel">✕</button>
+          </div>
+          <p class="tuning-subtitle">Live values update immediately. Gameplay pauses while this panel is open.</p>
+          <div id="tuningControls" class="tuning-controls"></div>
+          <div class="tuning-actions">
+            <button id="resetTuning" class="btn btn-muted" type="button">Reset to Defaults</button>
+          </div>
+        </div>
+      </section>
+
       <section id="startScreen" class="overlay visible">
         <div class="card">
           <h1>Flowline Rider</h1>
