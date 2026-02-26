@@ -21,27 +21,17 @@
 
       <section id="hud" class="hud hidden" aria-live="polite">
         <div class="pill">Speed <span id="speedValue">0</span> m/s</div>
-        <div class="pill">Time <span id="timerValue">00:00.00</span></div>
-      </section>
-
-      <section id="progressHud" class="progress-hud hidden" aria-hidden="true">
-        <div id="progressBar" class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-          <div id="progressDot" class="progress-dot"></div>
-          <div id="checkpointMarks" class="checkpoint-marks"></div>
-        </div>
       </section>
 
       <button id="tuningToggle" class="tuning-toggle" type="button" aria-label="Open tuning panel">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.10.2</p>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.11.0</p>
 
       <section id="tuningPanel" class="tuning-panel" aria-hidden="true">
         <div class="tuning-card" role="dialog" aria-modal="true" aria-labelledby="tuningTitle">
           <div class="tuning-header">
-            <h2 id="tuningTitle">Gameplay Tuning</h2>
+            <h2 id="tuningTitle">Tuning</h2>
             <button id="tuningClose" class="icon-btn" type="button" aria-label="Close tuning panel">✕</button>
           </div>
-          <p class="tuning-subtitle">Live values update immediately. Gameplay pauses while this panel is open.</p>
           <div id="tuningControls" class="tuning-controls"></div>
           <div class="tuning-actions">
             <button id="resetTuning" class="btn btn-muted" type="button">Reset to Defaults</button>
@@ -53,8 +43,8 @@
         <div class="card">
           <h1>Flowline Rider</h1>
           <p>
-            Hold while grounded to pedal and build jump charge. Release on the ground to jump. Tap on
-            ascent to flip, then hold while descending to pre-charge your next takeoff.
+            Hold while grounded to pedal and build jump charge. Release on the ground to jump. Tap on ascent to
+            flip, then hold while descending to pre-charge your next takeoff.
           </p>
           <button id="startButton" class="btn">Start Ride</button>
         </div>
@@ -66,7 +56,6 @@
         <div class="card">
           <h2 id="gameOverTitle">Ride Complete</h2>
           <p>Final score: <strong id="finalScore">0</strong></p>
-          <p>Final time: <strong id="finalTime">00:00.00</strong></p>
           <button id="restartButton" class="btn">Ride Again</button>
         </div>
       </section>
