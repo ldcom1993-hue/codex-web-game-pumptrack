@@ -3,9 +3,6 @@ const ctx = canvas.getContext("2d");
 
 const hud = document.getElementById("hud");
 const speedValue = document.getElementById("speedValue");
-const chargeValue = document.getElementById("chargeValue");
-const chargeFill = document.getElementById("chargeFill");
-const chargeMarker = document.getElementById("chargeMarker");
 const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
 const gameOverTitle = document.getElementById("gameOverTitle");
@@ -17,30 +14,33 @@ const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
 
 const physics = {
-  gravity: 26,
-  slopeGravity: 42,
-  pedalAccel: 11,
-  groundFriction: 1.6,
-  airDrag: 0.11,
-  maxSpeed: 34,
-  minRollingSpeed: 2.8,
-  jumpBaseImpulse: 8.6,
-  jumpChargeImpulse: 8.5,
+  gravity: 28,
+  pedalAccel: 7.2,
+  rollingFriction: 1.05,
+  airDrag: 0.14,
+  minSpeed: 2,
+  maxSpeed: 29,
+  maxVisibleJumpVy: 14,
   chargeCapSeconds: 1,
-  perfectMin: 0.74,
-  perfectMax: 0.92,
-  perfectJumpBonus: 1.4,
-  perfectSpeedBonus: 1.25,
-  flipTorque: 13,
-  angularDamping: 1.2,
-  landingAngleTolerance: 0.5,
-  landingAngularTolerance: 5.3,
+  jumpBaseImpulse: 6.4,
+  jumpChargeImpulse: 6.8,
+  flipImpulse: 7.8,
+  airbornePitchDamping: 1.9,
+  uprightStiffness: 23,
+  uprightDamping: 8.4,
+  suspensionStiffness: 26,
+  suspensionDamping: 9.4,
+  hardCrashPitch: 1.35,
+  hardCrashAngular: 8.8,
+  recoverablePitch: 0.88,
+  recoverableAngular: 6.4,
 };
 
 const rider = {
   wheelRadius: 11,
-  wheelBase: 40,
-  bodyHeight: 22,
+  wheelBase: 42,
+  bodyHeight: 23,
+  comHeight: 27,
 };
 
 const state = {
@@ -49,14 +49,14 @@ const state = {
   orientationBlocked: false,
   worldX: 0,
   riderY: 0,
-  vx: 9.5,
+  vx: 9,
   vy: 0,
   airborne: false,
   holdActive: false,
   pedaling: false,
+  descending: false,
   charge: 0,
   chargeRatio: 0,
-  canFlip: true,
   angle: 0,
   angularVelocity: 0,
   terrainAngle: 0,
@@ -64,7 +64,7 @@ const state = {
   displaySpeed: 0,
   suspension: 0,
   suspensionVel: 0,
-  crashReason: "",
+  tipTimer: 0,
   clock: 0,
 };
 
@@ -88,40 +88,40 @@ function handleOrientation() {
 }
 
 function terrainY(worldX) {
-  const base = height * 0.67;
+  const base = height * 0.69;
   return (
     base +
-    Math.sin(worldX * 0.009) * 48 +
-    Math.sin(worldX * 0.0042 + 0.45) * 34 +
-    Math.sin(worldX * 0.0018 + 1.6) * 20
+    Math.sin(worldX * 0.0082) * 44 +
+    Math.sin(worldX * 0.004 + 0.54) * 32 +
+    Math.sin(worldX * 0.0018 + 1.9) * 16
   );
 }
 
 function terrainSlope(worldX) {
-  const dx = 10;
-  return (terrainY(worldX + dx) - terrainY(worldX - dx)) / (dx * 2);
+  const dx = 8;
+  return (terrainY(worldX + dx) - terrainY(worldX - dx)) / (2 * dx);
 }
 
 function terrainAngle(worldX) {
   return Math.atan(terrainSlope(worldX));
 }
 
-function normalizeAngle(angle) {
-  return Math.atan2(Math.sin(angle), Math.cos(angle));
+function normalizeAngle(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
 function resetRun() {
   state.over = false;
   state.running = true;
   state.worldX = 0;
-  state.vx = 9.5;
+  state.vx = 9;
   state.vy = 0;
   state.airborne = false;
   state.holdActive = false;
   state.pedaling = false;
+  state.descending = false;
   state.charge = 0;
   state.chargeRatio = 0;
-  state.canFlip = true;
   state.angle = terrainAngle(0);
   state.angularVelocity = 0;
   state.terrainAngle = state.angle;
@@ -130,33 +130,31 @@ function resetRun() {
   state.displaySpeed = 0;
   state.suspension = 0;
   state.suspensionVel = 0;
-  state.crashReason = "";
+  state.tipTimer = 0;
   state.clock = 0;
-  updateHud();
 
+  updateHud();
   startScreen.classList.remove("visible");
   gameOverScreen.classList.remove("visible");
   hud.classList.remove("hidden");
 }
 
-function endRun(crash = false, reason = "") {
+function endRun(crash = false) {
   state.running = false;
   state.over = true;
   state.holdActive = false;
   state.pedaling = false;
   state.charge = 0;
   state.chargeRatio = 0;
-  state.crashReason = reason;
 
   gameOverTitle.textContent = crash ? "Crash" : "Ride Complete";
   finalScore.textContent = Math.round(state.score);
   gameOverScreen.classList.add("visible");
 }
 
-function showFeedback(text, kind = "normal", duration = 760) {
+function showFeedback(text, kind = "normal", duration = 700) {
   feedback.textContent = text;
   feedback.classList.add("visible");
-  feedback.classList.toggle("perfect", kind === "perfect");
   feedback.classList.toggle("crash", kind === "crash");
   clearTimeout(showFeedback.timer);
   showFeedback.timer = setTimeout(() => feedback.classList.remove("visible"), duration);
@@ -166,154 +164,188 @@ function onPressStart() {
   if (!state.running || state.orientationBlocked) return;
   state.holdActive = true;
 
-  if (state.airborne) {
-    if (state.canFlip) {
-      state.angularVelocity += physics.flipTorque;
-      state.canFlip = false;
-      showFeedback("Flip!", "normal", 460);
-    }
-    return;
+  if (state.airborne && !state.descending) {
+    state.angularVelocity += physics.flipImpulse;
+    showFeedback("Flip", "normal", 320);
   }
+}
 
-  state.pedaling = true;
+function applyJumpFromCharge() {
+  if (state.chargeRatio <= 0.04) return;
+
+  const jumpImpulse = Math.min(
+    physics.maxVisibleJumpVy,
+    physics.jumpBaseImpulse + physics.jumpChargeImpulse * state.chargeRatio
+  );
+
+  state.airborne = true;
+  state.vy = -jumpImpulse;
+  state.pedaling = false;
+  state.descending = false;
+  state.charge = 0;
+  state.chargeRatio = 0;
+
+  const riderTop = state.riderY - 34;
+  if (riderTop < 24) {
+    state.vy = Math.min(state.vy, -4.2);
+  }
 }
 
 function onPressEnd() {
   if (!state.running || state.orientationBlocked) return;
   state.holdActive = false;
 
-  if (state.airborne) return;
-
-  const ratio = state.chargeRatio;
-  if (ratio > 0.08) {
-    let jumpImpulse = physics.jumpBaseImpulse + physics.jumpChargeImpulse * ratio;
-    let forwardBoost = 0;
-
-    if (ratio >= physics.perfectMin && ratio <= physics.perfectMax) {
-      jumpImpulse += physics.perfectJumpBonus;
-      forwardBoost = physics.perfectSpeedBonus;
-      showFeedback("Perfect", "perfect");
-    }
-
-    state.airborne = true;
-    state.vy = -jumpImpulse;
-    state.vx = Math.min(physics.maxSpeed, state.vx + forwardBoost);
-    state.canFlip = true;
+  if (state.airborne) {
     state.pedaling = false;
-    state.charge = 0;
-    state.chargeRatio = 0;
     return;
   }
 
-  state.pedaling = false;
-  state.charge = 0;
-  state.chargeRatio = 0;
+  applyJumpFromCharge();
+  if (!state.airborne) {
+    state.charge = 0;
+    state.chargeRatio = 0;
+    state.pedaling = false;
+  }
 }
 
 function crash(reason) {
-  showFeedback(reason, "crash", 1200);
-  endRun(true, reason);
+  showFeedback(reason, "crash", 1100);
+  endRun(true);
+}
+
+function updateCharge(dt, canCharge) {
+  state.pedaling = state.holdActive && canCharge;
+  if (state.pedaling) {
+    state.charge = Math.min(physics.chargeCapSeconds, state.charge + dt);
+  }
+  state.chargeRatio += (Math.min(1, state.charge / physics.chargeCapSeconds) - state.chargeRatio) * Math.min(1, dt * 16);
 }
 
 function updateGroundPhysics(dt) {
-  const frontX = state.worldX + rider.wheelBase * 0.5;
-  const slope = terrainSlope(frontX);
-  const angle = Math.atan(slope);
-  state.terrainAngle = angle;
+  const centerX = state.worldX;
+  const slope = terrainSlope(centerX);
+  const slopeNorm = Math.sqrt(1 + slope * slope);
+  const gravityAlong = (physics.gravity * slope) / slopeNorm;
 
-  const gravityDrive = physics.slopeGravity * slope;
-  state.vx += gravityDrive * dt;
+  state.vx += gravityAlong * dt;
 
+  updateCharge(dt, true);
   if (state.pedaling) {
     state.vx += physics.pedalAccel * dt;
-    state.charge += dt;
   }
 
-  const friction = physics.groundFriction * dt * Math.sign(state.vx);
-  if (Math.abs(state.vx) > friction) {
-    state.vx -= friction;
-  } else {
-    state.vx = 0;
-  }
+  const friction = physics.rollingFriction * dt;
+  if (state.vx > friction) state.vx -= friction;
+  else if (state.vx < -friction) state.vx += friction;
+  else state.vx = 0;
 
-  state.vx = Math.max(physics.minRollingSpeed, Math.min(physics.maxSpeed, state.vx));
+  state.vx = Math.max(physics.minSpeed, Math.min(physics.maxSpeed, state.vx));
   state.worldX += state.vx * dt * 60;
 
-  const targetY = terrainY(frontX) - rider.wheelRadius - rider.bodyHeight;
+  state.terrainAngle = terrainAngle(state.worldX);
+  const targetY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
   state.riderY = targetY;
 
-  const crouch = state.pedaling ? state.chargeRatio * 0.6 : 0;
-  state.angle += (angle - state.angle) * Math.min(1, dt * 13) - crouch * 0.02;
+  const crouchBias = state.pedaling ? state.chargeRatio * 0.18 : 0;
+  const targetAngle = state.terrainAngle - crouchBias;
+  const angleError = normalizeAngle(targetAngle - state.angle);
+  const stabilizeTorque = angleError * physics.uprightStiffness - state.angularVelocity * physics.uprightDamping;
 
-  state.chargeRatio = Math.min(1, state.charge / physics.chargeCapSeconds);
+  state.angularVelocity += stabilizeTorque * dt;
+  state.angle += state.angularVelocity * dt;
+
+  const comProjection = Math.sin(normalizeAngle(state.angle - state.terrainAngle)) * rider.comHeight;
+  const supportHalf = rider.wheelBase * 0.5;
+  if (Math.abs(comProjection) > supportHalf) {
+    state.tipTimer += dt;
+  } else {
+    state.tipTimer = Math.max(0, state.tipTimer - dt * 2);
+  }
+
+  if (Math.abs(normalizeAngle(state.angle - state.terrainAngle)) > physics.hardCrashPitch || state.tipTimer > 0.28) {
+    crash("Lost balance");
+  }
+}
+
+function evaluateLanding() {
+  const terrain = terrainAngle(state.worldX);
+  const pitchDelta = normalizeAngle(state.angle - terrain);
+  const angVel = Math.abs(state.angularVelocity);
+
+  if (Math.abs(pitchDelta) > physics.hardCrashPitch || angVel > physics.hardCrashAngular) {
+    crash("Hard impact");
+    return;
+  }
+
+  if (Math.abs(pitchDelta) > physics.recoverablePitch && angVel > physics.recoverableAngular) {
+    crash("Could not recover");
+    return;
+  }
+
+  state.airborne = false;
+  state.vy = 0;
+  state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
+  state.terrainAngle = terrain;
+  state.suspensionVel -= 1.8;
+  state.tipTimer = 0;
+  showFeedback("Landing", "normal", 360);
+
+  if (state.holdActive) {
+    updateCharge(0.016, true);
+  } else {
+    state.pedaling = false;
+    state.charge = 0;
+    state.chargeRatio = 0;
+  }
 }
 
 function updateAirPhysics(dt) {
   state.vy += physics.gravity * dt;
-  state.angularVelocity *= Math.max(0, 1 - physics.angularDamping * dt);
+  state.descending = state.vy > 0;
+
+  updateCharge(dt, state.descending);
+
+  state.angularVelocity *= Math.max(0, 1 - physics.airbornePitchDamping * dt);
   state.angle += state.angularVelocity * dt;
 
-  state.vx = Math.max(physics.minRollingSpeed, state.vx - physics.airDrag * dt);
+  state.vx = Math.max(physics.minSpeed, state.vx - physics.airDrag * dt);
   state.worldX += state.vx * dt * 60;
   state.riderY += state.vy * dt * 60;
 
-  const frontX = state.worldX + rider.wheelBase * 0.5;
-  const groundY = terrainY(frontX) - rider.wheelRadius - rider.bodyHeight;
-
+  const groundY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
   if (state.riderY >= groundY) {
-    const landingAngle = terrainAngle(frontX);
-    const angleDelta = Math.abs(normalizeAngle(state.angle - landingAngle));
-    const angularSpeed = Math.abs(state.angularVelocity);
-
-    if (angleDelta > physics.landingAngleTolerance || angularSpeed > physics.landingAngularTolerance) {
-      crash(angleDelta > physics.landingAngleTolerance ? "Crash: bad angle" : "Crash: unstable landing");
-      return;
-    }
-
-    state.airborne = false;
     state.riderY = groundY;
-    state.vy = 0;
-    state.charge = 0;
-    state.chargeRatio = 0;
-    state.pedaling = state.holdActive;
-    state.angle = landingAngle;
-    state.angularVelocity = 0;
-    state.suspensionVel -= 1.9;
-    showFeedback("Clean Landing", "normal", 520);
+    evaluateLanding();
   }
 }
 
 function updateSuspension(dt) {
-  const stiffness = 21;
-  const damping = 8.8;
-  state.suspensionVel += (-state.suspension * stiffness - state.suspensionVel * damping) * dt;
+  state.suspensionVel +=
+    (-state.suspension * physics.suspensionStiffness - state.suspensionVel * physics.suspensionDamping) * dt;
   state.suspension += state.suspensionVel * dt;
 }
 
 function updateHud() {
-  state.displaySpeed += (state.vx - state.displaySpeed) * 0.2;
+  state.displaySpeed += (state.vx - state.displaySpeed) * 0.18;
   speedValue.textContent = state.displaySpeed.toFixed(1);
-  const pct = Math.round(state.chargeRatio * 100);
-  chargeValue.textContent = `${pct}%`;
-  chargeFill.style.width = `${pct}%`;
-  chargeMarker.style.left = `${pct}%`;
 }
 
 function update(dt) {
   if (!state.running || state.orientationBlocked) return;
 
   state.clock += dt;
-
-  if (!state.airborne) {
-    updateGroundPhysics(dt);
-  } else {
-    updateAirPhysics(dt);
-  }
+  if (state.airborne) updateAirPhysics(dt);
+  else updateGroundPhysics(dt);
 
   if (!state.running) return;
 
+  const riderTop = state.riderY - 40;
+  if (riderTop < 10 && state.vy < -3.6) {
+    state.vy = -3.6;
+  }
+
   updateSuspension(dt);
-  state.score += state.vx * dt * (state.airborne ? 0.8 : 1.1);
+  state.score += state.vx * dt * (state.airborne ? 0.9 : 1.2);
   updateHud();
 }
 
@@ -326,7 +358,7 @@ function drawBackground() {
 
   ctx.fillStyle = "rgba(126, 231, 255, 0.06)";
   for (let i = 0; i < 4; i += 1) {
-    const y = height * 0.16 + i * 90 + Math.sin(state.clock * 0.4 + i * 0.8) * 8;
+    const y = height * 0.16 + i * 90 + Math.sin(state.clock * 0.35 + i * 0.8) * 8;
     ctx.fillRect(0, y, width, 2);
   }
 }
@@ -334,7 +366,6 @@ function drawBackground() {
 function drawTrack() {
   const playerScreenX = width * 0.3;
   const startX = state.worldX - playerScreenX - 120;
-  const endX = startX + width + 240;
 
   ctx.beginPath();
   for (let x = 0; x <= width + 240; x += 8) {
@@ -355,7 +386,7 @@ function drawTrack() {
   ctx.fill();
 
   ctx.beginPath();
-  for (let world = startX; world <= endX; world += 4) {
+  for (let world = startX; world <= startX + width + 240; world += 4) {
     const x = world - startX - 120;
     const y = terrainY(world);
     if (world === startX) ctx.moveTo(x, y);
@@ -366,16 +397,31 @@ function drawTrack() {
   ctx.stroke();
 }
 
-function drawChargeHint(playerX, playerY) {
-  if (state.airborne || state.chargeRatio <= 0) return;
-  const widthBar = 80;
-  const h = 7;
-  const x = playerX - widthBar * 0.5;
-  const y = playerY - 52;
-  ctx.fillStyle = "rgba(0,0,0,0.32)";
-  ctx.fillRect(x, y, widthBar, h);
-  ctx.fillStyle = "#7ee7ff";
-  ctx.fillRect(x, y, widthBar * state.chargeRatio, h);
+function drawChargeAboveRider(playerX, riderY) {
+  if (state.chargeRatio <= 0.01 && !state.pedaling) return;
+
+  const barWidth = 74;
+  const barHeight = 8;
+  const x = playerX - barWidth * 0.5;
+  const y = riderY - 58;
+
+  ctx.fillStyle = "rgba(10, 16, 28, 0.75)";
+  ctx.strokeStyle = "rgba(236,243,255,0.25)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, barWidth, barHeight, 99);
+  ctx.fill();
+  ctx.stroke();
+
+  const fillW = Math.max(0, Math.min(barWidth, barWidth * state.chargeRatio));
+  const fillGrad = ctx.createLinearGradient(x, y, x + barWidth, y);
+  fillGrad.addColorStop(0, "#7ee7ff");
+  fillGrad.addColorStop(1, "#a0ffcb");
+
+  ctx.fillStyle = fillGrad;
+  ctx.beginPath();
+  ctx.roundRect(x, y, fillW, barHeight, 99);
+  ctx.fill();
 }
 
 function drawRider() {
@@ -383,14 +429,14 @@ function drawRider() {
   const compress = Math.max(-8, Math.min(8, state.suspension * 120));
   const riderY = state.riderY + compress;
 
-  const pedalSpeed = state.pedaling ? 7.5 : 3.1;
+  const pedalSpeed = state.pedaling ? 8 : 2.6;
   const pedalPhase = state.clock * pedalSpeed;
-  const crouch = state.pedaling && !state.airborne ? state.chargeRatio * 5.5 : 0;
-  const extend = state.airborne ? Math.max(-3, -state.vy * 0.12) : 0;
+  const crouch = state.pedaling && !state.airborne ? state.chargeRatio * 6 : 0;
+  const extend = state.airborne ? Math.max(-2.8, -state.vy * 0.11) : 0;
 
   const frontWheel = { x: 16, y: 16 };
   const rearWheel = { x: -16, y: 16 };
-  const crank = { x: -2, y: 10 };
+  const crank = { x: -1, y: 10 };
   const pedalRadius = 6;
 
   const footFront = {
@@ -407,8 +453,8 @@ function drawRider() {
   ctx.rotate(state.angle);
 
   const hip = { x: -1, y: -crouch + extend };
-  const shoulder = { x: 2, y: -11 - crouch * 0.65 + extend * 0.4 };
-  const head = { x: 4, y: -22 - crouch * 0.4 + extend * 0.6 };
+  const shoulder = { x: 2, y: -11 - crouch * 0.65 + extend * 0.45 };
+  const head = { x: 4, y: -22 - crouch * 0.3 + extend * 0.55 };
   const handlebar = { x: 12, y: 2 };
   const seat = { x: -8, y: 5 };
 
@@ -467,14 +513,13 @@ function drawRider() {
 
   ctx.restore();
 
-  drawChargeHint(playerScreenX, riderY);
+  drawChargeAboveRider(playerScreenX, riderY);
 }
 
 function drawOverlayTelemetry() {
   ctx.fillStyle = "rgba(236,243,255,0.9)";
-  ctx.font = "600 14px Inter, system-ui";
-  ctx.textAlign = "left";
-  const status = state.airborne ? "Air" : state.pedaling ? "Pedaling" : "Coasting";
+  ctx.font = "600 13px Inter, system-ui";
+  const status = state.airborne ? (state.descending ? "Air / Descend" : "Air / Ascend") : state.pedaling ? "Pedaling" : "Coasting";
   ctx.fillText(`State: ${status}`, 16, height - 18);
 }
 
