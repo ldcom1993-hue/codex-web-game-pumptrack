@@ -47,6 +47,38 @@ let width = 0;
 let height = 0;
 let dpr = 1;
 let lastTime = 0;
+let skyClouds = [];
+let skyBirds = [];
+
+function createSkyCloud(index) {
+  return {
+    seed: index * 73.17 + 21.3,
+    y: 0.11 + Math.random() * 0.26,
+    width: 90 + Math.random() * 140,
+    height: 22 + Math.random() * 36,
+    parallax: 0.08 + Math.random() * 0.12,
+    drift: 0.8 + Math.random() * 1.4,
+    alpha: 0.14 + Math.random() * 0.2,
+  };
+}
+
+function createSkyBird(index) {
+  return {
+    seed: index * 131.9 + 47.1,
+    y: 0.13 + Math.random() * 0.24,
+    parallax: 0.22 + Math.random() * 0.2,
+    drift: 2 + Math.random() * 2.4,
+    size: 10 + Math.random() * 8,
+    flapSpeed: 0.004 + Math.random() * 0.003,
+    flapPhase: Math.random() * Math.PI * 2,
+    alpha: 0.35 + Math.random() * 0.35,
+  };
+}
+
+function initSky() {
+  skyClouds = Array.from({ length: 7 }, (_, index) => createSkyCloud(index));
+  skyBirds = Array.from({ length: 5 }, (_, index) => createSkyBird(index));
+}
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -57,6 +89,10 @@ function resize() {
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  if (!skyClouds.length || !skyBirds.length) {
+    initSky();
+  }
 }
 
 function isLandscape() {
@@ -221,6 +257,61 @@ function drawBackground() {
     const y = height * 0.16 + i * 88 + Math.sin(state.t * 0.0005 + i * 0.8) * 12;
     ctx.fillRect(0, y, width, 2);
   }
+
+  drawSkyLayers();
+}
+
+function drawSkyLayers() {
+  for (const cloud of skyClouds) {
+    const travel = state.worldX * cloud.parallax + state.t * 0.001 * cloud.drift;
+    const baseX = ((cloud.seed * 97 - travel) % (width + cloud.width * 2)) - cloud.width;
+    const bob = Math.sin(state.t * 0.00045 + cloud.seed) * 10;
+    const y = height * cloud.y + bob;
+    drawCloud(baseX, y, cloud);
+    drawCloud(baseX + width + cloud.width * 1.4, y, cloud);
+  }
+
+  for (const bird of skyBirds) {
+    const travel = state.worldX * bird.parallax + state.t * 0.001 * bird.drift;
+    const x = ((bird.seed * 61 - travel) % (width + 120)) - 60;
+    const glide = Math.sin(state.t * 0.0012 + bird.seed * 0.4) * 14;
+    const y = height * bird.y + glide;
+    drawBird(x, y, bird);
+    drawBird(x + width + 90, y, bird);
+  }
+}
+
+function drawCloud(x, y, cloud) {
+  const puff = cloud.width * 0.26;
+  ctx.save();
+  ctx.globalAlpha = cloud.alpha;
+  ctx.fillStyle = "#dce9ff";
+  ctx.beginPath();
+  ctx.ellipse(x, y, cloud.width * 0.38, cloud.height * 0.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(x + puff, y - cloud.height * 0.18, cloud.width * 0.34, cloud.height * 0.56, 0, 0, Math.PI * 2);
+  ctx.ellipse(x - puff, y - cloud.height * 0.12, cloud.width * 0.3, cloud.height * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBird(x, y, bird) {
+  const flap = Math.sin(state.t * bird.flapSpeed + bird.flapPhase);
+  const wingSpread = bird.size * (0.95 + Math.abs(flap) * 0.6);
+  const wingDrop = bird.size * (0.16 + flap * 0.22);
+
+  ctx.save();
+  ctx.strokeStyle = `rgba(214, 232, 255, ${bird.alpha})`;
+  ctx.lineWidth = 1.8;
+  ctx.lineCap = "round";
+
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x - wingSpread * 0.45, y - wingDrop, x - wingSpread, y + wingDrop * 0.6);
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + wingSpread * 0.45, y - wingDrop, x + wingSpread, y + wingDrop * 0.6);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawTrack() {
