@@ -266,42 +266,154 @@ function drawRider() {
   const airLean = state.airborne ? state.vy * 0.02 : 0;
   const lean = slopeLean + pumpLean + airLean;
   const compress = Math.max(-6, Math.min(6, state.spring * 140));
+  const pedalPhase = state.worldX * 0.17 + state.t * 0.022;
 
   ctx.save();
   ctx.translate(playerScreenX, state.riderY + compress);
   ctx.rotate(lean);
 
-  const torsoTilt = state.airborne ? -1 : 0;
+  const torsoLift = state.airborne ? -1.8 : 0;
+  const rearWheel = { x: -16, y: 16 };
+  const frontWheel = { x: 18, y: 16 };
+  const wheelRadius = 7.5;
 
-  ctx.fillStyle = "#d9e7ff";
+  const bottomBracket = { x: -1, y: 10 };
+  const seatTube = { x: -8, y: 5 };
+  const headTube = { x: 12, y: 3 };
+  const topTubeRear = { x: -6, y: 2 };
+  const handleBar = { x: 13.4, y: 0.8 };
+
+  const shoulder = { x: 0.6, y: -8.8 + torsoLift };
+  const elbow = { x: 5.6, y: -4 + torsoLift * 0.6 };
+  const hip = { x: -3.4, y: 0.2 + torsoLift * 0.35 };
+  const kneeFront = {
+    x: -0.7 + Math.cos(pedalPhase - 0.2) * 4.8,
+    y: 4.2 + Math.sin(pedalPhase - 0.2) * 3.8,
+  };
+  const kneeBack = {
+    x: -5.4 + Math.cos(pedalPhase + Math.PI - 0.2) * 3.8,
+    y: 4.8 + Math.sin(pedalPhase + Math.PI - 0.2) * 3.2,
+  };
+  const footFront = {
+    x: bottomBracket.x + Math.cos(pedalPhase) * 5.4,
+    y: bottomBracket.y + Math.sin(pedalPhase) * 5.4,
+  };
+  const footBack = {
+    x: bottomBracket.x + Math.cos(pedalPhase + Math.PI) * 5.4,
+    y: bottomBracket.y + Math.sin(pedalPhase + Math.PI) * 5.4,
+  };
+
+  const bikeGlow = ctx.createLinearGradient(-20, 0, 24, 24);
+  bikeGlow.addColorStop(0, "rgba(176, 232, 255, 0.85)");
+  bikeGlow.addColorStop(1, "rgba(94, 126, 255, 0.92)");
+
+  ctx.strokeStyle = "rgba(236, 243, 255, 0.24)";
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(0, -22 + torsoTilt, 8, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(bottomBracket.x, bottomBracket.y, 5.8, 0, Math.PI * 2);
+  ctx.stroke();
 
-  ctx.strokeStyle = "#7ee7ff";
-  ctx.lineWidth = 5;
+  for (const wheel of [rearWheel, frontWheel]) {
+    ctx.strokeStyle = "rgba(236, 243, 255, 0.26)";
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let spoke = 0; spoke < 6; spoke++) {
+      const a = pedalPhase * 0.36 + spoke * ((Math.PI * 2) / 6);
+      const sx = wheel.x + Math.cos(a) * (wheelRadius - 0.7);
+      const sy = wheel.y + Math.sin(a) * (wheelRadius - 0.7);
+      ctx.moveTo(wheel.x, wheel.y);
+      ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+
+    const tireGrad = ctx.createRadialGradient(wheel.x, wheel.y, wheelRadius - 2.2, wheel.x, wheel.y, wheelRadius + 1.4);
+    tireGrad.addColorStop(0, "rgba(19, 26, 50, 0.45)");
+    tireGrad.addColorStop(1, "rgba(236, 243, 255, 0.88)");
+    ctx.strokeStyle = tireGrad;
+    ctx.lineWidth = 2.1;
+    ctx.beginPath();
+    ctx.arc(wheel.x, wheel.y, wheelRadius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(236, 243, 255, 0.92)";
+    ctx.beginPath();
+    ctx.arc(wheel.x, wheel.y, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = bikeGlow;
+  ctx.lineWidth = 2.8;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(rearWheel.x, rearWheel.y);
+  ctx.lineTo(seatTube.x, seatTube.y);
+  ctx.lineTo(headTube.x, headTube.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.moveTo(seatTube.x, seatTube.y);
+  ctx.lineTo(bottomBracket.x, bottomBracket.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.moveTo(topTubeRear.x, topTubeRear.y);
+  ctx.lineTo(headTube.x, headTube.y);
+  ctx.moveTo(topTubeRear.x, topTubeRear.y);
+  ctx.lineTo(rearWheel.x, rearWheel.y);
+  ctx.moveTo(headTube.x, headTube.y);
+  ctx.lineTo(handleBar.x, handleBar.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(236, 243, 255, 0.95)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(handleBar.x - 2.4, handleBar.y - 1.4);
+  ctx.lineTo(handleBar.x + 3.2, handleBar.y - 1.4);
+  ctx.moveTo(seatTube.x - 2.3, seatTube.y - 1.2);
+  ctx.lineTo(seatTube.x + 1.6, seatTube.y - 1.2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(157, 175, 255, 0.95)";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(bottomBracket.x, bottomBracket.y);
+  ctx.lineTo(footFront.x, footFront.y);
+  ctx.moveTo(bottomBracket.x, bottomBracket.y);
+  ctx.lineTo(footBack.x, footBack.y);
+  ctx.stroke();
+
+  const suitGrad = ctx.createLinearGradient(-8, -20, 12, 14);
+  suitGrad.addColorStop(0, "#d4e8ff");
+  suitGrad.addColorStop(1, "#86a5ff");
+
+  ctx.strokeStyle = suitGrad;
+  ctx.lineWidth = 4.8;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(0, -14 + torsoTilt);
-  ctx.lineTo(0, 4);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
   ctx.stroke();
 
   ctx.strokeStyle = "#9dafff";
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 3.1;
   ctx.beginPath();
-  ctx.moveTo(0, -7 + torsoTilt);
-  ctx.lineTo(11, -1);
-  ctx.moveTo(0, 4);
-  ctx.lineTo(-8, 13);
-  ctx.lineTo(11, 14);
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.quadraticCurveTo(elbow.x, elbow.y, handleBar.x - 0.8, handleBar.y + 0.9);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.quadraticCurveTo(kneeFront.x, kneeFront.y, footFront.x, footFront.y);
+  ctx.moveTo(hip.x + 0.3, hip.y + 0.2);
+  ctx.quadraticCurveTo(kneeBack.x, kneeBack.y, footBack.x, footBack.y);
   ctx.stroke();
 
-  ctx.strokeStyle = "#ecf3ff";
-  ctx.lineWidth = 3;
+  const helmetGrad = ctx.createRadialGradient(2, -19 + torsoLift, 2, 2, -19 + torsoLift, 8.2);
+  helmetGrad.addColorStop(0, "#f8fbff");
+  helmetGrad.addColorStop(1, "#97b6ff");
+  ctx.fillStyle = helmetGrad;
   ctx.beginPath();
-  ctx.moveTo(-15, 14);
-  ctx.lineTo(16, 14);
-  ctx.stroke();
+  ctx.arc(2, -19 + torsoLift, 7.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(13, 22, 45, 0.62)";
+  ctx.beginPath();
+  ctx.ellipse(4.3, -18 + torsoLift, 3.2, 2.2, -0.28, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
 }
