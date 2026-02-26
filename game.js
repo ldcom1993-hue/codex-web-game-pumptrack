@@ -18,15 +18,15 @@ const tuningClose = document.getElementById("tuningClose");
 const tuningControls = document.getElementById("tuningControls");
 const resetTuning = document.getElementById("resetTuning");
 
-const STORAGE_KEY = "flowline-rider-v0.11.0-tuning";
+const STORAGE_KEY = "flowline-rider-v0.11.1-tuning";
 
 const physics = {
   gravity: 28,
-  pedalAccel: 7.2,
-  rollingFriction: 1.05,
+  pedalAccel: 3,
+  rollingFriction: 1.9,
   airDrag: 0.14,
   minSpeed: 2,
-  maxSpeed: 29,
+  maxSpeed: 17.2,
   maxVisibleJumpVy: 14,
   chargeCapSeconds: 1,
   jumpBaseImpulse: 6.4,
@@ -53,18 +53,18 @@ const rider = {
 const tuningDefaults = {
   physics: {
     gravity: 28,
-    pedalAccel: 7.2,
-    rollingFriction: 1.05,
-    maxSpeed: 29,
+    pedalAccel: 3,
+    rollingFriction: 1.9,
+    maxSpeed: 17.2,
   },
   terrain: {
     lengthMultiplier: 1,
     hillHeightMultiplier: 1,
-    hillSpacingMultiplier: 1,
+    hillSpacingMultiplier: 1.19,
   },
   camera: {
     followSmoothness: 1,
-    zoomLevel: 1,
+    zoomLevel: 0.89,
   },
 };
 
