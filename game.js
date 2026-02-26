@@ -266,41 +266,98 @@ function drawRider() {
   const airLean = state.airborne ? state.vy * 0.02 : 0;
   const lean = slopeLean + pumpLean + airLean;
   const compress = Math.max(-6, Math.min(6, state.spring * 140));
+  const pedalPhase = state.worldX * 0.16 + state.t * 0.018;
+  const pedalRadius = 5.5;
+  const crankX = -2;
+  const crankY = 10;
+  const footFront = {
+    x: crankX + Math.cos(pedalPhase) * pedalRadius,
+    y: crankY + Math.sin(pedalPhase) * pedalRadius,
+  };
+  const footBack = {
+    x: crankX + Math.cos(pedalPhase + Math.PI) * pedalRadius,
+    y: crankY + Math.sin(pedalPhase + Math.PI) * pedalRadius,
+  };
 
   ctx.save();
   ctx.translate(playerScreenX, state.riderY + compress);
   ctx.rotate(lean);
 
-  const torsoTilt = state.airborne ? -1 : 0;
+  const torsoTilt = state.airborne ? -2 : 0;
+  const shoulder = { x: 1, y: -8 + torsoTilt };
+  const hip = { x: -1, y: 0 };
+  const seat = { x: -8, y: 5 };
+  const frontWheel = { x: 14, y: 16 };
+  const rearWheel = { x: -14, y: 16 };
+  const handlebar = { x: 11, y: 2 };
+  const pedalColor = "#9dafff";
 
-  ctx.fillStyle = "#d9e7ff";
+  ctx.strokeStyle = "rgba(143, 232, 255, 0.2)";
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(0, -22 + torsoTilt, 8, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#7ee7ff";
-  ctx.lineWidth = 5;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(0, -14 + torsoTilt);
-  ctx.lineTo(0, 4);
+  ctx.arc(crankX, crankY, pedalRadius, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "#9dafff";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#8fe8ff";
+  ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(0, -7 + torsoTilt);
-  ctx.lineTo(11, -1);
-  ctx.moveTo(0, 4);
-  ctx.lineTo(-8, 13);
-  ctx.lineTo(11, 14);
+  ctx.moveTo(rearWheel.x, rearWheel.y);
+  ctx.lineTo(seat.x, seat.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.closePath();
+  ctx.moveTo(seat.x, seat.y);
+  ctx.lineTo(handlebar.x, handlebar.y);
+  ctx.moveTo(crankX, crankY);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
   ctx.stroke();
 
   ctx.strokeStyle = "#ecf3ff";
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
-  ctx.moveTo(-15, 14);
-  ctx.lineTo(16, 14);
+  ctx.arc(frontWheel.x, frontWheel.y, 7, 0, Math.PI * 2);
+  ctx.arc(rearWheel.x, rearWheel.y, 7, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = pedalColor;
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(crankX, crankY);
+  ctx.lineTo(footFront.x, footFront.y);
+  ctx.moveTo(crankX, crankY);
+  ctx.lineTo(footBack.x, footBack.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#7ee7ff";
+  ctx.lineWidth = 4.4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
+  ctx.stroke();
+
+  ctx.fillStyle = "#d9e7ff";
+  ctx.beginPath();
+  ctx.arc(2, -20 + torsoTilt, 7.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#9dafff";
+  ctx.lineWidth = 3.6;
+  ctx.beginPath();
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.lineTo(handlebar.x - 1, handlebar.y + 1);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(footFront.x, footFront.y);
+  ctx.moveTo(hip.x + 0.8, hip.y + 0.4);
+  ctx.lineTo(footBack.x, footBack.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#d9e7ff";
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(handlebar.x - 3, handlebar.y - 1.5);
+  ctx.lineTo(handlebar.x + 2.8, handlebar.y - 1.5);
+  ctx.moveTo(seat.x - 2.5, seat.y - 1.2);
+  ctx.lineTo(seat.x + 1.5, seat.y - 1.2);
   ctx.stroke();
 
   ctx.restore();
