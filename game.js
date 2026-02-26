@@ -19,8 +19,8 @@ const rotateNotice = document.getElementById("rotateNotice");
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
 
-const LEVEL_LENGTH = 2100;
-const CHECKPOINT_SPACING = 130;
+const LEVEL_LENGTH = 800;
+const CHECKPOINT_SPACING = 80;
 const checkpoints = Array.from({ length: Math.floor(LEVEL_LENGTH / CHECKPOINT_SPACING) }, (_, index) => {
   const x = (index + 1) * CHECKPOINT_SPACING;
   return {
@@ -32,14 +32,16 @@ const checkpoints = Array.from({ length: Math.floor(LEVEL_LENGTH / CHECKPOINT_SP
 });
 
 const physics = {
-  gravity: 28,
-  pedalAccel: 7.2,
-  rollingFriction: 1.05,
-  airDrag: 0.14,
-  minSpeed: 2,
-  maxSpeed: 29,
+  gravity: 12.6,
+  pedalAccelMin: 0.5,
+  pedalAccelMid: 0.9,
+  pedalAccelMax: 1.55,
+  rollingFriction: 0.35,
+  airDrag: 0.09,
+  minSpeed: 0.16,
+  maxSpeed: 15,
   maxVisibleJumpVy: 14,
-  chargeCapSeconds: 1,
+  chargeCapSeconds: 1.5,
   jumpBaseImpulse: 6.4,
   jumpChargeImpulse: 6.8,
   flipImpulse: 7.8,
@@ -76,7 +78,7 @@ const state = {
   crashFlash: 0,
   worldX: 0,
   riderY: 0,
-  vx: 9,
+  vx: 4.2,
   vy: 0,
   airborne: false,
   holdActive: false,
@@ -101,9 +103,16 @@ const state = {
     x: 0,
     y: 0,
     angle: 0,
-    speed: 9,
+    speed: 4.2,
   },
 };
+
+const terrainConfig = {
+  minSegmentLength: 20,
+  maxSegmentLength: 80,
+};
+
+let terrainSegments = [];
 
 let width = 0;
 let height = 0;
@@ -125,13 +134,79 @@ function handleOrientation() {
 }
 
 function terrainY(worldX) {
-  const base = height * 0.69;
-  return (
-    base +
-    Math.sin(worldX * 0.0082) * 44 +
-    Math.sin(worldX * 0.004 + 0.54) * 32 +
-    Math.sin(worldX * 0.0018 + 1.9) * 16
-  );
+  const base = height * 0.67;
+  return base + terrainElevation(worldX);
+}
+
+function seededRandom(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let n = Math.imul(t ^ (t >>> 15), t | 1);
+    n ^= n + Math.imul(n ^ (n >>> 7), n | 61);
+    return ((n ^ (n >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickSlope(rand, index) {
+  const pattern = index % 6;
+  if (pattern === 0) return (rand() - 0.5) * 0.05;
+  if (pattern === 1 || pattern === 2) return -(0.05 + rand() * 0.12);
+  if (pattern === 3 || pattern === 4) return 0.07 + rand() * 0.13;
+  return (rand() - 0.5) * 0.11;
+}
+
+function buildTerrainSegments() {
+  const rand = seededRandom(1010);
+  terrainSegments = [];
+  let x = 0;
+  let elevation = 0;
+  let index = 0;
+
+  while (x < LEVEL_LENGTH) {
+    const slope = pickSlope(rand, index);
+    const minLen = slope > 0.06 ? 28 : terrainConfig.minSegmentLength;
+    const maxLen = slope < -0.04 ? terrainConfig.maxSegmentLength : 60;
+    const length = Math.min(LEVEL_LENGTH - x, minLen + rand() * (maxLen - minLen));
+
+    const startX = x;
+    const startElevation = elevation;
+    let endElevation = startElevation + slope * length;
+    endElevation = Math.max(-140, Math.min(140, endElevation));
+
+    const waveAmp = index % 5 === 2 ? 0 : 1 + rand() * 3.4;
+    const waveCycles = 0.5 + rand() * 1.4;
+    const phase = rand() * Math.PI * 2;
+
+    terrainSegments.push({
+      startX,
+      endX: startX + length,
+      startElevation,
+      endElevation,
+      waveAmp,
+      waveCycles,
+      phase,
+    });
+
+    x += length;
+    elevation = endElevation;
+    index += 1;
+  }
+}
+
+function terrainElevation(worldX) {
+  const x = Math.max(0, Math.min(LEVEL_LENGTH, worldX));
+  const segment =
+    terrainSegments.find((item) => x >= item.startX && x <= item.endX) || terrainSegments[terrainSegments.length - 1];
+
+  if (!segment) return 0;
+
+  const range = Math.max(0.0001, segment.endX - segment.startX);
+  const t = Math.max(0, Math.min(1, (x - segment.startX) / range));
+  const smoothT = t * t * (3 - 2 * t);
+  const base = segment.startElevation + (segment.endElevation - segment.startElevation) * smoothT;
+  const wave = Math.sin((t * segment.waveCycles + segment.phase) * Math.PI * 2) * segment.waveAmp;
+  return base + wave;
 }
 
 function terrainSlope(worldX) {
@@ -188,7 +263,7 @@ function resetRun() {
   state.respawnTimer = 0;
   state.crashFlash = 0;
   state.worldX = 0;
-  state.vx = 9;
+  state.vx = 4.2;
   state.vy = 0;
   state.airborne = false;
   state.holdActive = false;
@@ -213,7 +288,7 @@ function resetRun() {
     x: 0,
     y: state.riderY,
     angle: startAngle,
-    speed: 9,
+    speed: 4.2,
   };
 
   camera.x = 0;
@@ -341,13 +416,21 @@ function updateGroundPhysics(dt) {
   const centerX = state.worldX;
   const slope = terrainSlope(centerX);
   const slopeNorm = Math.sqrt(1 + slope * slope);
-  const gravityAlong = (physics.gravity * slope) / slopeNorm;
+  const gravityAlong = (-physics.gravity * slope) / slopeNorm;
 
   state.vx += gravityAlong * dt;
 
   updateCharge(dt, true);
   if (state.pedaling) {
-    state.vx += physics.pedalAccel * dt;
+    const pedalTime = state.charge;
+    let pedalAccel = physics.pedalAccelMin;
+    if (pedalTime > 1) {
+      pedalAccel = physics.pedalAccelMax;
+    } else if (pedalTime > 0.3) {
+      const midBlend = (pedalTime - 0.3) / 0.7;
+      pedalAccel = physics.pedalAccelMid + (physics.pedalAccelMax - physics.pedalAccelMid) * Math.max(0, Math.min(1, midBlend));
+    }
+    state.vx += pedalAccel * dt;
   }
 
   const friction = physics.rollingFriction * dt;
@@ -356,7 +439,7 @@ function updateGroundPhysics(dt) {
   else state.vx = 0;
 
   state.vx = Math.max(physics.minSpeed, Math.min(physics.maxSpeed, state.vx));
-  state.worldX += state.vx * dt * 60;
+  state.worldX += state.vx * dt;
 
   state.terrainAngle = terrainAngle(state.worldX);
   state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
@@ -424,8 +507,8 @@ function updateAirPhysics(dt) {
   state.angle += state.angularVelocity * dt;
 
   state.vx = Math.max(physics.minSpeed, state.vx - physics.airDrag * dt);
-  state.worldX += state.vx * dt * 60;
-  state.riderY += state.vy * dt * 60;
+  state.worldX += state.vx * dt;
+  state.riderY += state.vy * dt;
 
   const groundY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
   if (state.riderY >= groundY) {
@@ -456,12 +539,12 @@ function updateCheckpointState() {
 }
 
 function updateCamera(dt) {
-  const lookAhead = 220 + state.vx * 5.3;
+  const lookAhead = 28 + state.vx * 3.2;
   const targetX = Math.min(LEVEL_LENGTH, state.worldX + lookAhead);
   const jumpLift = state.airborne ? -36 - Math.min(40, Math.abs(state.vy) * 2.8) : 0;
   const targetY = state.riderY + jumpLift;
 
-  const speedZoom = Math.min(0.14, Math.max(0, (state.vx - 12) * 0.007));
+  const speedZoom = Math.min(0.14, Math.max(0, (state.vx - 7) * 0.02));
   const airZoom = state.airborne ? 0.06 : 0;
   const targetZoom = 1 - speedZoom - airZoom;
 
@@ -786,6 +869,7 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   width = window.innerWidth;
   height = window.innerHeight;
+  buildTerrainSegments();
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
   canvas.style.width = `${width}px`;
