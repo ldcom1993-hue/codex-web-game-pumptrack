@@ -1,9 +1,68 @@
 # AGENTS.md
-Guidelines and persistent rules for Codex and contributors.
+Guidelines and mandatory rules for Codex and contributors.
 
 ---
 
-# Deployment (GitHub Pages)
+## VERSIONING (MANDATORY)
+All branches, pull requests, and commits must include a version number prefix.
+
+Version format:
+`vMAJOR.MINOR.PATCH – short description`
+
+Examples:
+- `v0.1.0 – initial prototype`
+- `v0.2.0 – slope-based gravity system`
+- `v0.3.0 – jump charge system`
+- `v0.3.1 – gravity tuning`
+- `v0.4.0 – airborne flip system`
+
+Branch naming format:
+`codex/vMAJOR.MINOR.PATCH-short-description`
+
+Pull request title format:
+`vMAJOR.MINOR.PATCH – short description`
+
+Commit message format:
+`vMAJOR.MINOR.PATCH short description`
+
+### VERSION INCREMENT RULES
+
+PATCH:
+- small tuning
+- bug fixes
+- minor gameplay adjustments
+
+MINOR:
+- new gameplay mechanic
+- new physics system
+- new control system
+
+MAJOR:
+- stable public release
+
+Never silently overwrite major gameplay behavior without a new version number.
+
+---
+
+## GAMEPLAY DEVELOPMENT PRIORITIES
+Prioritize:
+- gameplay feel
+- smooth physics
+- mobile usability
+- clean and maintainable code
+
+Always refine gameplay iteratively.
+
+---
+
+## MOBILE AND DEPLOYMENT RULES
+- Maintain compatibility with GitHub Pages.
+- Maintain landscape mobile compatibility.
+- Ensure service worker cache version is updated when frontend behavior changes.
+
+---
+
+## Deployment (GitHub Pages)
 - Always keep the production version compatible with GitHub Pages.
 - Deploy from the `main` branch.
 - Keep site files in the repository root unless otherwise specified.
@@ -11,19 +70,19 @@ Guidelines and persistent rules for Codex and contributors.
 
 ---
 
-# PWA and caching
+## PWA and caching
 - Always include a `manifest.webmanifest`.
 - Always include a `sw.js` service worker.
 - Always define a constant:
 
-  const CACHE_VERSION = "v1";
+  `const CACHE_VERSION = "v1";`
 
-- Increment CACHE_VERSION whenever any frontend file changes.
+- Increment `CACHE_VERSION` whenever any frontend file changes.
 - Ensure service worker updates correctly and does not trap users on old versions.
 
 ---
 
-# Mobile-first design
+## Mobile-first design
 - Always design mobile-first.
 - Optimize for touch interaction.
 - Minimum touch target size: 44px.
@@ -32,9 +91,8 @@ Guidelines and persistent rules for Codex and contributors.
 
 ---
 
-# UI / UX standards
+## UI / UX standards
 Use modern design conventions:
-
 - clean layout
 - rounded corners (12–16px)
 - subtle shadows
@@ -50,7 +108,7 @@ Preferred inspiration:
 
 ---
 
-# Performance
+## Performance
 - Keep load time fast.
 - Avoid heavy frameworks unless explicitly requested.
 - Prefer vanilla HTML, CSS, and JavaScript.
@@ -59,7 +117,7 @@ Preferred inspiration:
 
 ---
 
-# Code structure
+## Code structure
 Default structure:
 
 /
@@ -75,21 +133,22 @@ Keep structure simple and maintainable.
 
 ---
 
-# Git workflow
-- Never push directly to main unless explicitly requested.
+## Git workflow
+- Never push directly to `main` unless explicitly requested.
 - Always create a branch and open a Pull Request.
 - Keep commits clear and descriptive.
+- When creating any new feature or refactor, always create a new versioned branch and pull request.
 
 ---
 
-# Safety and robustness
+## Safety and robustness
 - Do not break existing features.
 - Preserve backward compatibility.
 - Test logic before committing.
 
 ---
 
-# For games (if applicable)
+## For games (if applicable)
 - Must work with touch input.
 - Maintain stable physics behavior.
 - Avoid external dependencies unless necessary.
@@ -97,32 +156,8 @@ Keep structure simple and maintainable.
 
 ---
 
-# Default behavior
+## Default behavior
 When unsure:
 - choose the simplest robust solution
 - maintain compatibility with GitHub Pages
 - maintain mobile compatibility
-
-
-## Skills
-A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
-### Available skills
-- skill-creator: Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Codex's capabilities with specialized knowledge, workflows, or tool integrations. (file: /opt/codex/skills/.system/skill-creator/SKILL.md)
-- skill-installer: Install Codex skills into $CODEX_HOME/skills from a curated list or a GitHub repo path. Use when a user asks to list installable skills, install a curated skill, or install a skill from another repo (including private repos). (file: /opt/codex/skills/.system/skill-installer/SKILL.md)
-### How to use skills
-- Discovery: The list above is the skills available in this session (name + description + file path). Skill bodies live on disk at the listed paths.
-- Trigger rules: If the user names a skill (with `$SkillName` or plain text) OR the task clearly matches a skill's description shown above, you must use that skill for that turn. Multiple mentions mean use them all. Do not carry skills across turns unless re-mentioned.
-- Missing/blocked: If a named skill isn't in the list or the path can't be read, say so briefly and continue with the best fallback.
-- How to use a skill (progressive disclosure):
-  1) After deciding to use a skill, open its `SKILL.md`. Read only enough to follow the workflow.
-  2) If `SKILL.md` points to extra folders such as `references/`, load only the specific files needed for the request; don't bulk-load everything.
-  3) If `scripts/` exist, prefer running or patching them instead of retyping large code blocks.
-  4) If `assets/` or templates exist, reuse them instead of recreating from scratch.
-- Coordination and sequencing:
-  - If multiple skills apply, choose the minimal set that covers the request and state the order you'll use them.
-  - Announce which skill(s) you're using and why (one short line). If you skip an obvious skill, say why.
-- Context hygiene:
-  - Keep context small: summarize long sections instead of pasting them; only load extra files when needed.
-  - Avoid deep reference-chasing: prefer opening only files directly linked from `SKILL.md` unless you're blocked.
-  - When variants exist (frameworks, providers, domains), pick only the relevant reference file(s) and note that choice.
-- Safety and fallback: If a skill can't be applied cleanly (missing files, unclear instructions), state the issue, pick the next-best approach, and continue.
