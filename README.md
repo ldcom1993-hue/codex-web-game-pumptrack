@@ -6,10 +6,11 @@ Pump Flow is a mobile-first pumptrack riding game built with vanilla HTML, CSS, 
 
 - **Hold touch on downslopes** to pump and accelerate.
 - **Release near crests** to pop into the air.
-- **Tap while airborne** for extra style points.
+- **Tap while airborne** for extra style through flips.
 - Land cleanly to keep your streak and maximize score.
+- Reach checkpoints to secure fast crash restarts.
 
-Each run lasts 60 seconds. Build flow and chase your best score.
+Each run is a finite course with a live progress bar, checkpoint markers, and a run timer.
 
 ## Run locally
 
@@ -23,7 +24,7 @@ Then open `http://localhost:8080`.
 
 - `index.html` - app shell + screens
 - `styles.css` - mobile-first minimalist styling
-- `game.js` - game loop, touch controls, physics, and rendering
+- `game.js` - game loop, touch controls, physics, checkpoints, timer, camera, and rendering
 - `manifest.webmanifest` - PWA metadata
 - `sw.js` - offline cache + update handling
 - `assets/icon.svg` - app icon

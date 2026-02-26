@@ -2,16 +2,34 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const hud = document.getElementById("hud");
+const progressHud = document.getElementById("progressHud");
 const speedValue = document.getElementById("speedValue");
+const timerValue = document.getElementById("timerValue");
+const progressFill = document.getElementById("progressFill");
+const progressDot = document.getElementById("progressDot");
+const checkpointMarks = document.getElementById("checkpointMarks");
 const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
 const gameOverTitle = document.getElementById("gameOverTitle");
 const finalScore = document.getElementById("finalScore");
+const finalTime = document.getElementById("finalTime");
 const feedback = document.getElementById("feedback");
 const rotateNotice = document.getElementById("rotateNotice");
 
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
+
+const LEVEL_LENGTH = 2100;
+const CHECKPOINT_SPACING = 130;
+const checkpoints = Array.from({ length: Math.floor(LEVEL_LENGTH / CHECKPOINT_SPACING) }, (_, index) => {
+  const x = (index + 1) * CHECKPOINT_SPACING;
+  return {
+    id: index,
+    x,
+    y: 0,
+    angle: 0,
+  };
+});
 
 const physics = {
   gravity: 28,
@@ -43,10 +61,19 @@ const rider = {
   comHeight: 27,
 };
 
+const camera = {
+  x: 0,
+  y: 0,
+  zoom: 1,
+};
+
 const state = {
   running: false,
   over: false,
   orientationBlocked: false,
+  crashed: false,
+  respawnTimer: 0,
+  crashFlash: 0,
   worldX: 0,
   riderY: 0,
   vx: 9,
@@ -66,6 +93,16 @@ const state = {
   suspensionVel: 0,
   tipTimer: 0,
   clock: 0,
+  timer: 0,
+  timerStarted: false,
+  timerFinished: false,
+  checkpointIndex: -1,
+  respawn: {
+    x: 0,
+    y: 0,
+    angle: 0,
+    speed: 9,
+  },
 };
 
 let width = 0;
@@ -110,9 +147,46 @@ function normalizeAngle(a) {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
+function formatTime(totalSeconds) {
+  const mins = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = Math.floor(totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  const cents = Math.floor((totalSeconds % 1) * 100)
+    .toString()
+    .padStart(2, "0");
+  return `${mins}:${secs}.${cents}`;
+}
+
+function buildCheckpointMarks() {
+  checkpointMarks.innerHTML = "";
+  checkpoints.forEach((checkpoint) => {
+    checkpoint.y = terrainY(checkpoint.x) - rider.wheelRadius - rider.bodyHeight;
+    checkpoint.angle = terrainAngle(checkpoint.x);
+
+    const mark = document.createElement("span");
+    mark.className = "checkpoint-mark";
+    mark.style.left = `${(checkpoint.x / LEVEL_LENGTH) * 100}%`;
+    mark.dataset.index = checkpoint.id;
+    checkpointMarks.appendChild(mark);
+  });
+}
+
+function updateCheckpointMarks() {
+  checkpointMarks.querySelectorAll(".checkpoint-mark").forEach((mark) => {
+    mark.classList.toggle("active", Number(mark.dataset.index) <= state.checkpointIndex);
+  });
+}
+
 function resetRun() {
+  const startAngle = terrainAngle(0);
   state.over = false;
   state.running = true;
+  state.crashed = false;
+  state.respawnTimer = 0;
+  state.crashFlash = 0;
   state.worldX = 0;
   state.vx = 9;
   state.vy = 0;
@@ -122,21 +196,36 @@ function resetRun() {
   state.descending = false;
   state.charge = 0;
   state.chargeRatio = 0;
-  state.angle = terrainAngle(0);
+  state.angle = startAngle;
   state.angularVelocity = 0;
-  state.terrainAngle = state.angle;
+  state.terrainAngle = startAngle;
   state.riderY = terrainY(0) - rider.wheelRadius - rider.bodyHeight;
   state.score = 0;
   state.displaySpeed = 0;
   state.suspension = 0;
   state.suspensionVel = 0;
   state.tipTimer = 0;
-  state.clock = 0;
+  state.timer = 0;
+  state.timerStarted = false;
+  state.timerFinished = false;
+  state.checkpointIndex = -1;
+  state.respawn = {
+    x: 0,
+    y: state.riderY,
+    angle: startAngle,
+    speed: 9,
+  };
+
+  camera.x = 0;
+  camera.y = state.riderY;
+  camera.zoom = 1;
 
   updateHud();
+  updateCheckpointMarks();
   startScreen.classList.remove("visible");
   gameOverScreen.classList.remove("visible");
   hud.classList.remove("hidden");
+  progressHud.classList.remove("hidden");
 }
 
 function endRun(crash = false) {
@@ -146,13 +235,15 @@ function endRun(crash = false) {
   state.pedaling = false;
   state.charge = 0;
   state.chargeRatio = 0;
+  state.timerFinished = !crash;
 
   gameOverTitle.textContent = crash ? "Crash" : "Ride Complete";
   finalScore.textContent = Math.round(state.score);
+  finalTime.textContent = formatTime(state.timer);
   gameOverScreen.classList.add("visible");
 }
 
-function showFeedback(text, kind = "normal", duration = 700) {
+function showFeedback(text, kind = "normal", duration = 500) {
   feedback.textContent = text;
   feedback.classList.add("visible");
   feedback.classList.toggle("crash", kind === "crash");
@@ -161,12 +252,12 @@ function showFeedback(text, kind = "normal", duration = 700) {
 }
 
 function onPressStart() {
-  if (!state.running || state.orientationBlocked) return;
+  if (!state.running || state.orientationBlocked || state.crashed) return;
   state.holdActive = true;
 
   if (state.airborne && !state.descending) {
     state.angularVelocity += physics.flipImpulse;
-    showFeedback("Flip", "normal", 320);
+    showFeedback("Flip", "normal", 280);
   }
 }
 
@@ -192,7 +283,7 @@ function applyJumpFromCharge() {
 }
 
 function onPressEnd() {
-  if (!state.running || state.orientationBlocked) return;
+  if (!state.running || state.orientationBlocked || state.crashed) return;
   state.holdActive = false;
 
   if (state.airborne) {
@@ -208,9 +299,34 @@ function onPressEnd() {
   }
 }
 
-function crash(reason) {
-  showFeedback(reason, "crash", 1100);
-  endRun(true);
+function triggerCrash(reason) {
+  state.crashed = true;
+  state.respawnTimer = 0.22;
+  state.crashFlash = 0.2;
+  state.airborne = false;
+  state.holdActive = false;
+  state.pedaling = false;
+  state.vy = 0;
+  showFeedback(reason, "crash", 320);
+}
+
+function respawnAtCheckpoint() {
+  state.crashed = false;
+  state.respawnTimer = 0;
+  state.worldX = state.respawn.x;
+  state.riderY = state.respawn.y;
+  state.vx = Math.max(physics.minSpeed, state.respawn.speed);
+  state.vy = 0;
+  state.angle = state.respawn.angle;
+  state.terrainAngle = state.respawn.angle;
+  state.angularVelocity = 0;
+  state.tipTimer = 0;
+  state.charge = 0;
+  state.chargeRatio = 0;
+  state.airborne = false;
+  state.suspensionVel -= 1.1;
+
+  showFeedback(state.checkpointIndex >= 0 ? "Checkpoint restart" : "Restart", "normal", 320);
 }
 
 function updateCharge(dt, canCharge) {
@@ -243,8 +359,7 @@ function updateGroundPhysics(dt) {
   state.worldX += state.vx * dt * 60;
 
   state.terrainAngle = terrainAngle(state.worldX);
-  const targetY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
-  state.riderY = targetY;
+  state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
 
   const crouchBias = state.pedaling ? state.chargeRatio * 0.18 : 0;
   const targetAngle = state.terrainAngle - crouchBias;
@@ -263,7 +378,7 @@ function updateGroundPhysics(dt) {
   }
 
   if (Math.abs(normalizeAngle(state.angle - state.terrainAngle)) > physics.hardCrashPitch || state.tipTimer > 0.28) {
-    crash("Lost balance");
+    triggerCrash("Lost balance");
   }
 }
 
@@ -273,12 +388,12 @@ function evaluateLanding() {
   const angVel = Math.abs(state.angularVelocity);
 
   if (Math.abs(pitchDelta) > physics.hardCrashPitch || angVel > physics.hardCrashAngular) {
-    crash("Hard impact");
+    triggerCrash("Hard impact");
     return;
   }
 
   if (Math.abs(pitchDelta) > physics.recoverablePitch && angVel > physics.recoverableAngular) {
-    crash("Could not recover");
+    triggerCrash("Could not recover");
     return;
   }
 
@@ -288,7 +403,7 @@ function evaluateLanding() {
   state.terrainAngle = terrain;
   state.suspensionVel -= 1.8;
   state.tipTimer = 0;
-  showFeedback("Landing", "normal", 360);
+  showFeedback("Landing", "normal", 280);
 
   if (state.holdActive) {
     updateCharge(0.016, true);
@@ -325,28 +440,108 @@ function updateSuspension(dt) {
   state.suspension += state.suspensionVel * dt;
 }
 
+function updateCheckpointState() {
+  const next = checkpoints[state.checkpointIndex + 1];
+  if (!next || state.worldX < next.x) return;
+
+  state.checkpointIndex += 1;
+  state.respawn = {
+    x: next.x,
+    y: next.y,
+    angle: next.angle,
+    speed: Math.max(physics.minSpeed + 1, state.vx),
+  };
+  updateCheckpointMarks();
+  showFeedback("Checkpoint", "normal", 380);
+}
+
+function updateCamera(dt) {
+  const lookAhead = 220 + state.vx * 5.3;
+  const targetX = Math.min(LEVEL_LENGTH, state.worldX + lookAhead);
+  const jumpLift = state.airborne ? -36 - Math.min(40, Math.abs(state.vy) * 2.8) : 0;
+  const targetY = state.riderY + jumpLift;
+
+  const speedZoom = Math.min(0.14, Math.max(0, (state.vx - 12) * 0.007));
+  const airZoom = state.airborne ? 0.06 : 0;
+  const targetZoom = 1 - speedZoom - airZoom;
+
+  const smooth = state.crashed ? 3.8 : 4.8;
+  camera.x += (targetX - camera.x) * Math.min(1, dt * smooth);
+  camera.y += (targetY - camera.y) * Math.min(1, dt * 4.2);
+  camera.zoom += (targetZoom - camera.zoom) * Math.min(1, dt * 3.2);
+
+  const riderScreenX = (state.worldX - camera.x) * camera.zoom + width * 0.34;
+  const margin = 82;
+  if (riderScreenX < margin) {
+    camera.x -= (margin - riderScreenX) / camera.zoom;
+  } else if (riderScreenX > width - margin) {
+    camera.x += (riderScreenX - (width - margin)) / camera.zoom;
+  }
+}
+
 function updateHud() {
   state.displaySpeed += (state.vx - state.displaySpeed) * 0.18;
   speedValue.textContent = state.displaySpeed.toFixed(1);
+  timerValue.textContent = formatTime(state.timer);
+
+  const progress = Math.max(0, Math.min(1, state.worldX / LEVEL_LENGTH));
+  const percent = progress * 100;
+  progressFill.style.width = `${percent}%`;
+  progressDot.style.left = `${percent}%`;
 }
 
 function update(dt) {
   if (!state.running || state.orientationBlocked) return;
 
   state.clock += dt;
+  if (state.crashFlash > 0) {
+    state.crashFlash = Math.max(0, state.crashFlash - dt);
+  }
+
+  if (state.crashed) {
+    state.respawnTimer -= dt;
+    updateCamera(dt);
+    updateHud();
+    if (state.respawnTimer <= 0) {
+      respawnAtCheckpoint();
+    }
+    return;
+  }
+
+  if (!state.timerStarted && Math.abs(state.vx) > 2.2 && state.worldX > 3) {
+    state.timerStarted = true;
+  }
+  if (state.timerStarted && !state.timerFinished) {
+    state.timer += dt;
+  }
+
   if (state.airborne) updateAirPhysics(dt);
   else updateGroundPhysics(dt);
 
-  if (!state.running) return;
+  if (state.worldX >= LEVEL_LENGTH) {
+    state.worldX = LEVEL_LENGTH;
+    state.timerFinished = true;
+    endRun(false);
+    return;
+  }
 
   const riderTop = state.riderY - 40;
   if (riderTop < 10 && state.vy < -3.6) {
     state.vy = -3.6;
   }
 
+  updateCheckpointState();
   updateSuspension(dt);
   state.score += state.vx * dt * (state.airborne ? 0.9 : 1.2);
+  updateCamera(dt);
   updateHud();
+}
+
+function toScreen(worldX, worldY) {
+  return {
+    x: (worldX - camera.x) * camera.zoom + width * 0.34,
+    y: (worldY - camera.y) * camera.zoom + height * 0.54,
+  };
 }
 
 function drawBackground() {
@@ -356,27 +551,31 @@ function drawBackground() {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = "rgba(126, 231, 255, 0.06)";
   for (let i = 0; i < 4; i += 1) {
-    const y = height * 0.16 + i * 90 + Math.sin(state.clock * 0.35 + i * 0.8) * 8;
-    ctx.fillRect(0, y, width, 2);
+    const speedFactor = 0.08 + i * 0.035;
+    const y = height * (0.2 + i * 0.12) + Math.sin(state.clock * 0.22 + i) * 8;
+    const offset = -(camera.x * speedFactor) % (width + 140);
+    ctx.fillStyle = "rgba(126, 231, 255, 0.07)";
+    for (let x = offset - 140; x < width + 140; x += 190) {
+      ctx.fillRect(x, y, 110, 2);
+    }
   }
 }
 
 function drawTrack() {
-  const playerScreenX = width * 0.3;
-  const startX = state.worldX - playerScreenX - 120;
+  const worldStart = camera.x - width * 0.45 / camera.zoom;
+  const worldEnd = camera.x + width * 0.85 / camera.zoom;
+  const step = 8;
 
   ctx.beginPath();
-  for (let x = 0; x <= width + 240; x += 8) {
-    const world = startX + x;
-    const y = terrainY(world);
-    if (x === 0) ctx.moveTo(-120, y);
-    else ctx.lineTo(x - 120, y);
+  for (let world = worldStart; world <= worldEnd; world += step) {
+    const p = toScreen(world, terrainY(world));
+    if (world === worldStart) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
   }
 
-  ctx.lineTo(width + 120, height + 120);
-  ctx.lineTo(-120, height + 120);
+  ctx.lineTo(width + 40, height + 80);
+  ctx.lineTo(-40, height + 80);
   ctx.closePath();
 
   const fill = ctx.createLinearGradient(0, height * 0.4, 0, height);
@@ -386,23 +585,49 @@ function drawTrack() {
   ctx.fill();
 
   ctx.beginPath();
-  for (let world = startX; world <= startX + width + 240; world += 4) {
-    const x = world - startX - 120;
-    const y = terrainY(world);
-    if (world === startX) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  for (let world = worldStart; world <= worldEnd; world += 4) {
+    const p = toScreen(world, terrainY(world));
+    if (world === worldStart) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
   }
   ctx.lineWidth = 4;
   ctx.strokeStyle = "#8fe8ff";
   ctx.stroke();
 }
 
-function drawChargeAboveRider(playerX, riderY) {
+function drawCheckpoints() {
+  for (const checkpoint of checkpoints) {
+    if (checkpoint.x > LEVEL_LENGTH) continue;
+
+    const ground = toScreen(checkpoint.x, terrainY(checkpoint.x));
+    if (ground.x < -30 || ground.x > width + 30) continue;
+
+    const activated = checkpoint.id <= state.checkpointIndex;
+    const poleTopY = ground.y - 42 * camera.zoom;
+
+    ctx.strokeStyle = activated ? "#66ffc3" : "#f1c389";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(ground.x, ground.y - 2);
+    ctx.lineTo(ground.x, poleTopY);
+    ctx.stroke();
+
+    ctx.fillStyle = activated ? "rgba(76,255,176,0.86)" : "rgba(255,209,148,0.84)";
+    ctx.beginPath();
+    ctx.moveTo(ground.x, poleTopY);
+    ctx.lineTo(ground.x + 14 * camera.zoom, poleTopY + 8 * camera.zoom);
+    ctx.lineTo(ground.x, poleTopY + 14 * camera.zoom);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawChargeAboveRider(playerScreenX, riderY) {
   if (state.chargeRatio <= 0.01 && !state.pedaling) return;
 
   const barWidth = 74;
   const barHeight = 8;
-  const x = playerX - barWidth * 0.5;
+  const x = playerScreenX - barWidth * 0.5;
   const y = riderY - 58;
 
   ctx.fillStyle = "rgba(10, 16, 28, 0.75)";
@@ -425,9 +650,9 @@ function drawChargeAboveRider(playerX, riderY) {
 }
 
 function drawRider() {
-  const playerScreenX = width * 0.3;
+  const player = toScreen(state.worldX, state.riderY);
   const compress = Math.max(-8, Math.min(8, state.suspension * 120));
-  const riderY = state.riderY + compress;
+  const riderYPos = player.y + compress;
 
   const pedalSpeed = state.pedaling ? 8 : 2.6;
   const pedalPhase = state.clock * pedalSpeed;
@@ -449,8 +674,9 @@ function drawRider() {
   };
 
   ctx.save();
-  ctx.translate(playerScreenX, riderY);
+  ctx.translate(player.x, riderYPos);
   ctx.rotate(state.angle);
+  ctx.scale(camera.zoom, camera.zoom);
 
   const hip = { x: -1, y: -crouch + extend };
   const shoulder = { x: 2, y: -11 - crouch * 0.65 + extend * 0.45 };
@@ -513,14 +739,28 @@ function drawRider() {
 
   ctx.restore();
 
-  drawChargeAboveRider(playerScreenX, riderY);
+  drawChargeAboveRider(player.x, riderYPos);
 }
 
 function drawOverlayTelemetry() {
   ctx.fillStyle = "rgba(236,243,255,0.9)";
   ctx.font = "600 13px Inter, system-ui";
-  const status = state.airborne ? (state.descending ? "Air / Descend" : "Air / Ascend") : state.pedaling ? "Pedaling" : "Coasting";
+  const status = state.crashed
+    ? "Respawning"
+    : state.airborne
+      ? state.descending
+        ? "Air / Descend"
+        : "Air / Ascend"
+      : state.pedaling
+        ? "Pedaling"
+        : "Coasting";
   ctx.fillText(`State: ${status}`, 16, height - 18);
+}
+
+function drawCrashFlash() {
+  if (state.crashFlash <= 0) return;
+  ctx.fillStyle = `rgba(255, 80, 80, ${state.crashFlash * 0.35})`;
+  ctx.fillRect(0, 0, width, height);
 }
 
 function frame(ts) {
@@ -533,8 +773,10 @@ function frame(ts) {
   drawBackground();
   if (!state.orientationBlocked) {
     drawTrack();
+    drawCheckpoints();
     drawRider();
     drawOverlayTelemetry();
+    drawCrashFlash();
   }
 
   requestAnimationFrame(frame);
@@ -549,6 +791,7 @@ function resize() {
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildCheckpointMarks();
 }
 
 startButton.addEventListener("click", resetRun);
