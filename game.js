@@ -18,7 +18,7 @@ const tuningClose = document.getElementById("tuningClose");
 const tuningControls = document.getElementById("tuningControls");
 const resetTuning = document.getElementById("resetTuning");
 
-const STORAGE_KEY = "flowline-rider-v0.11.1-tuning";
+const STORAGE_KEY = "flowline-rider-v0.12.1-tuning";
 
 const physics = {
   gravity: 28,
@@ -31,8 +31,7 @@ const physics = {
   chargeCapSeconds: 1,
   jumpBaseImpulse: 6.4,
   jumpChargeImpulse: 6.8,
-  flipImpulse: 7.8,
-  airbornePitchDamping: 1.9,
+  airbornePitchDamping: 2.8,
   uprightStiffness: 23,
   uprightDamping: 8.4,
   suspensionStiffness: 26,
@@ -94,6 +93,11 @@ const state = {
   holdActive: false,
   pedaling: false,
   descending: false,
+  supermanActive: false,
+  supermanBlend: 0,
+  supermanHoldTime: 0,
+  jumpAirTime: 0,
+  jumpCombo: 0,
   charge: 0,
   chargeRatio: 0,
   angle: 0,
@@ -249,6 +253,11 @@ function resetRun() {
   state.holdActive = false;
   state.pedaling = false;
   state.descending = false;
+  state.supermanActive = false;
+  state.supermanBlend = 0;
+  state.supermanHoldTime = 0;
+  state.jumpAirTime = 0;
+  state.jumpCombo = 0;
   state.charge = 0;
   state.chargeRatio = 0;
   state.angle = terrainAngle(0);
@@ -294,8 +303,8 @@ function onPressStart() {
   state.holdActive = true;
 
   if (state.airborne && !state.descending) {
-    state.angularVelocity += physics.flipImpulse;
-    showFeedback("Flip", "normal", 320);
+    state.supermanActive = true;
+    showFeedback("Superman", "normal", 320);
   }
 }
 
@@ -311,6 +320,10 @@ function applyJumpFromCharge() {
   state.vy = -jumpImpulse;
   state.pedaling = false;
   state.descending = false;
+  state.supermanActive = false;
+  state.supermanBlend = 0;
+  state.supermanHoldTime = 0;
+  state.jumpAirTime = 0;
   state.charge = 0;
   state.chargeRatio = 0;
 
@@ -325,6 +338,7 @@ function onPressEnd() {
   state.holdActive = false;
 
   if (state.airborne) {
+    state.supermanActive = false;
     state.pedaling = false;
     return;
   }
@@ -397,6 +411,11 @@ function updateGroundPhysics(dt) {
 }
 
 function evaluateLanding() {
+  if (state.supermanBlend > 0.25 || state.supermanActive) {
+    crash("Held Superman on landing");
+    return;
+  }
+
   const terrain = terrainAngle(state.worldX);
   const pitchDelta = normalizeAngle(state.angle - terrain);
   const angVel = Math.abs(state.angularVelocity);
@@ -417,7 +436,23 @@ function evaluateLanding() {
   state.terrainAngle = terrain;
   state.suspensionVel -= 1.8;
   state.tipTimer = 0;
-  showFeedback("Landing", "normal", 360);
+
+  const airTimeBase = 30 + state.jumpAirTime * 34;
+  const supermanBonus = state.supermanHoldTime * 120;
+  const comboMultiplier = 1 + Math.min(2, state.jumpCombo * 0.25);
+  const jumpAward = (airTimeBase + supermanBonus) * comboMultiplier;
+  state.score += jumpAward;
+
+  if (state.supermanHoldTime > 0.06) {
+    state.jumpCombo += 1;
+    showFeedback(`Landing +${Math.round(jumpAward)} (x${comboMultiplier.toFixed(2)})`, "normal", 520);
+  } else {
+    state.jumpCombo = 0;
+    showFeedback(`Landing +${Math.round(jumpAward)}`, "normal", 420);
+  }
+
+  state.supermanHoldTime = 0;
+  state.jumpAirTime = 0;
 
   if (state.holdActive) {
     updateCharge(0.016, true);
@@ -431,6 +466,19 @@ function evaluateLanding() {
 function updateAirPhysics(dt) {
   state.vy += physics.gravity * dt;
   state.descending = state.vy > 0;
+  state.jumpAirTime += dt;
+
+  if (!state.holdActive) {
+    state.supermanActive = false;
+  }
+
+  if (state.supermanActive) {
+    state.supermanHoldTime += dt;
+  }
+
+  const supermanTarget = state.supermanActive ? 1 : 0;
+  const blendRate = state.supermanActive ? 8 : 18;
+  state.supermanBlend += (supermanTarget - state.supermanBlend) * Math.min(1, dt * blendRate);
 
   updateCharge(dt, state.descending);
 
@@ -569,6 +617,7 @@ function drawRider() {
   const pedalPhase = state.clock * pedalSpeed;
   const crouch = state.pedaling && !state.airborne ? state.chargeRatio * 6 : 0;
   const extend = state.airborne ? Math.max(-2.8, -state.vy * 0.11) : 0;
+  const superman = state.supermanBlend;
 
   const frontWheel = { x: 16, y: 16 };
   const rearWheel = { x: -16, y: 16 };
@@ -588,11 +637,23 @@ function drawRider() {
   ctx.translate(riderScreenX, riderY);
   ctx.rotate(state.angle);
 
-  const hip = { x: -1, y: -crouch + extend };
-  const shoulder = { x: 2, y: -11 - crouch * 0.65 + extend * 0.45 };
-  const head = { x: 4, y: -22 - crouch * 0.3 + extend * 0.55 };
+  const hip = { x: -1 - superman * 12, y: -crouch + extend + superman * 2.2 };
+  const shoulder = { x: 2 - superman * 20, y: -11 - crouch * 0.65 + extend * 0.45 + superman * 2.8 };
+  const head = { x: 4 - superman * 28, y: -22 - crouch * 0.3 + extend * 0.55 + superman * 3.2 };
   const handlebar = { x: 12, y: 2 };
   const seat = { x: -8, y: 5 };
+  const supermanReach = {
+    x: shoulder.x - 15 - superman * 8,
+    y: shoulder.y + 1.5 + superman * 0.8,
+  };
+  const supermanLegFront = {
+    x: hip.x - 17 - superman * 7,
+    y: hip.y + 7 + superman * 1.3,
+  };
+  const supermanLegBack = {
+    x: hip.x - 21 - superman * 7.5,
+    y: hip.y + 8.8 + superman * 1.4,
+  };
 
   ctx.strokeStyle = "#8fe8ff";
   ctx.lineWidth = 2.6;
@@ -639,13 +700,38 @@ function drawRider() {
   ctx.strokeStyle = "#9dafff";
   ctx.lineWidth = 3.7;
   ctx.beginPath();
+  const armFront = {
+    x: (handlebar.x - 1) * (1 - superman) + supermanReach.x * superman,
+    y: (handlebar.y + 1) * (1 - superman) + supermanReach.y * superman,
+  };
+  const legFront = {
+    x: footFront.x * (1 - superman) + supermanLegFront.x * superman,
+    y: footFront.y * (1 - superman) + supermanLegFront.y * superman,
+  };
+  const legBack = {
+    x: footBack.x * (1 - superman) + supermanLegBack.x * superman,
+    y: footBack.y * (1 - superman) + supermanLegBack.y * superman,
+  };
+
   ctx.moveTo(shoulder.x, shoulder.y);
-  ctx.lineTo(handlebar.x - 1, handlebar.y + 1);
+  ctx.lineTo(armFront.x, armFront.y);
   ctx.moveTo(hip.x, hip.y);
-  ctx.lineTo(footFront.x, footFront.y);
+  ctx.lineTo(legFront.x, legFront.y);
   ctx.moveTo(hip.x + 0.8, hip.y + 0.4);
-  ctx.lineTo(footBack.x, footBack.y);
+  ctx.lineTo(legBack.x, legBack.y);
   ctx.stroke();
+
+  if (superman > 0.16) {
+    ctx.strokeStyle = "rgba(126, 231, 255, 0.35)";
+    ctx.lineWidth = 1.8;
+    for (let i = 0; i < 3; i += 1) {
+      const offset = i * 4;
+      ctx.beginPath();
+      ctx.moveTo(head.x + 6 + offset, head.y + 1 + i * 1.5);
+      ctx.lineTo(head.x + 16 + offset * 1.5, head.y + 2 + i * 2);
+      ctx.stroke();
+    }
+  }
 
   ctx.restore();
 
@@ -655,7 +741,15 @@ function drawRider() {
 function drawOverlayTelemetry() {
   ctx.fillStyle = "rgba(236,243,255,0.9)";
   ctx.font = "600 13px Inter, system-ui";
-  const status = state.airborne ? (state.descending ? "Air / Descend" : "Air / Ascend") : state.pedaling ? "Pedaling" : "Coasting";
+  const status = state.supermanBlend > 0.15
+    ? "Superman"
+    : state.airborne
+      ? state.descending
+        ? "Air / Descend"
+        : "Air / Ascend"
+      : state.pedaling
+        ? "Pedaling"
+        : "Coasting";
   ctx.fillText(`State: ${status}`, 16, height - 18);
 }
 
