@@ -4,7 +4,6 @@ const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
 const totalScore = document.getElementById("totalScore");
 const timerValue = document.getElementById("timerValue");
-const comboBankValue = document.getElementById("comboBankValue");
 const comboBubble = document.getElementById("comboBubble");
 const distanceValue = document.getElementById("distanceValue");
 const speedValue = document.getElementById("speedValue");
@@ -33,8 +32,7 @@ const MODES = {
 };
 
 const RUN_DURATION = 60;
-const COMBO_TIMEOUT = 1.8;
-const BEST_SCORE_KEY = "flowline-rider-v0.13.1-best-score";
+const BEST_SCORE_KEY = "flowline-rider-v0.13.2-best-score";
 
 const physics = {
   gravity: 28,
@@ -100,13 +98,18 @@ const state = {
   terrainAngle: 0,
   totalScore: 0,
   comboCount: 0,
-  comboMultiplier: 1,
-  comboBank: 0,
-  comboGraceTimer: 0,
-  bestComboMultiplier: 1,
+  comboMultiplier: 0,
+  comboPool: 0,
+  jumpActive: false,
+  jumpLaunchX: 0,
+  jumpLaunchSlope: 0,
+  jumpPeakX: 0,
+  jumpPeakSlope: 0,
+  bestComboMultiplier: 0,
   displaySpeed: 0,
   distanceMeters: 0,
   jumpStartY: 0,
+  jumpLaunchY: 0,
   jumpStartX: 0,
   jumpPeakY: 0,
   jumpFromBump: false,
@@ -115,6 +118,7 @@ const state = {
   clock: 0,
   cameraWorldX: 0,
   timeLeft: RUN_DURATION,
+  prevGroundSlope: 0,
 };
 
 let width = 0;
@@ -202,9 +206,8 @@ function closeRunMenu() {
 
 function resetCombo() {
   state.comboCount = 0;
-  state.comboMultiplier = 1;
-  state.comboBank = 0;
-  state.comboGraceTimer = 0;
+  state.comboMultiplier = 0;
+  state.comboPool = 0;
   comboBubble.classList.remove("visible");
 }
 
@@ -231,17 +234,24 @@ function resetRun(mode = state.mode) {
   state.terrainAngle = state.angle;
   state.riderY = terrainY(0) - rider.wheelRadius - rider.bodyHeight;
   state.totalScore = 0;
-  state.bestComboMultiplier = 1;
+  state.bestComboMultiplier = 0;
   state.displaySpeed = 0;
   state.distanceMeters = 0;
   state.jumpStartY = state.riderY;
+  state.jumpLaunchY = state.riderY;
   state.jumpStartX = state.worldX;
   state.jumpPeakY = state.riderY;
   state.jumpFromBump = false;
+  state.jumpActive = false;
+  state.jumpLaunchX = state.worldX;
+  state.jumpLaunchSlope = terrainSlope(state.worldX);
+  state.jumpPeakX = state.worldX;
+  state.jumpPeakSlope = state.jumpLaunchSlope;
   state.suspension = 0;
   state.suspensionVel = 0;
   state.clock = 0;
   state.timeLeft = RUN_DURATION;
+  state.prevGroundSlope = terrainSlope(0);
   floatingScores.length = 0;
   floatingLayer.innerHTML = "";
 
@@ -264,7 +274,7 @@ function showMenu() {
 }
 
 function endRun() {
-  payoutCombo(true);
+  payoutCombo();
   state.running = false;
   state.over = true;
   state.holdActive = false;
@@ -279,7 +289,7 @@ function endRun() {
   }
 
   finalScore.textContent = Math.round(state.totalScore);
-  bestCombo.textContent = `x${state.bestComboMultiplier}`;
+  bestCombo.textContent = `x${Math.max(1, state.bestComboMultiplier)}`;
   gameOverScreen.classList.add("visible");
 }
 
@@ -330,19 +340,8 @@ function updateComboBubble() {
   }
 }
 
-function payoutCombo(force = false) {
-  if (state.comboCount <= 0 || state.comboBank <= 0) {
-    if (force) resetCombo();
-    return;
-  }
-
-  if (!force && state.comboGraceTimer > 0) return;
-
-  const payout = state.comboBank * state.comboMultiplier;
-  state.totalScore += payout;
-  animateComboPayout(payout);
-  resetCombo();
-  updateHud();
+function payoutCombo() {
+  finishComboPayout();
 }
 
 function onPressStart() {
@@ -371,9 +370,15 @@ function applyJumpFromCharge() {
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
   state.jumpStartY = state.riderY;
+  state.jumpLaunchY = state.riderY;
   state.jumpPeakY = state.riderY;
   state.jumpStartX = state.worldX;
   state.jumpFromBump = true;
+  state.jumpActive = true;
+  state.jumpLaunchX = state.worldX;
+  state.jumpLaunchSlope = terrainSlope(state.worldX);
+  state.jumpPeakX = state.worldX;
+  state.jumpPeakSlope = state.jumpLaunchSlope;
   state.charge = 0;
   state.chargeRatio = 0;
 
@@ -408,6 +413,10 @@ function updateCharge(dt, canCharge) {
 function updateGroundPhysics(dt) {
   const centerX = state.worldX;
   const slope = terrainSlope(centerX);
+  if (state.comboCount > 0 && state.prevGroundSlope > 0.02 && slope < -0.02) {
+    breakCombo();
+  }
+  state.prevGroundSlope = slope;
   const slopeNorm = Math.sqrt(1 + slope * slope);
   const gravityAlong = (physics.gravity * slope) / slopeNorm;
 
@@ -448,27 +457,60 @@ function computeJumpScore() {
   const weighted = normalizedHeight * 0.65 + normalizedAirtime * 0.35;
   const curved = Math.pow(weighted, 0.72);
 
-  let jumpAward = 10 + curved * 40;
-  if (isRiderMode()) jumpAward += Math.min(10, state.supermanHoldTime * 9.5);
+  const jumpAward = 10 + curved * 40;
   return Math.max(10, Math.min(50, jumpAward));
 }
 
-function animateComboPayout(payout) {
-  const source = comboBankValue.getBoundingClientRect();
-  const target = totalScore.getBoundingClientRect();
+
+function addLandingFeedback(text, worldX, worldY) {
   const node = document.createElement("div");
-  node.className = "combo-transfer";
-  node.textContent = `+${Math.round(payout)}`;
-  node.style.left = `${source.left}px`;
-  node.style.top = `${source.top}px`;
+  node.className = "floating-score landing-feedback";
+  node.textContent = text;
+  node.dataset.feedback = text.toLowerCase();
   floatingLayer.appendChild(node);
 
-  requestAnimationFrame(() => {
-    node.style.transform = `translate(${target.left - source.left}px, ${target.top - source.top}px)`;
-    node.style.opacity = "0";
+  floatingScores.push({
+    node,
+    worldX,
+    worldY,
+    age: 0,
+    ttl: 0.8,
+    drift: 26,
   });
+}
 
-  setTimeout(() => node.remove(), 560);
+function isPerfectLanding(terrainSlopeAtLanding) {
+  const peakClearance = state.jumpLaunchY - state.jumpPeakY;
+  const clearedBumpPeak = state.jumpPeakX > state.jumpLaunchX + 8 && state.jumpPeakSlope >= 0.01;
+  const launchFromUphill = state.jumpLaunchSlope > 0.012;
+  const landingOnDescendingSlope = terrainSlopeAtLanding < -0.03;
+  const alignedPosture = Math.abs(normalizeAngle(state.angle - state.terrainAngle)) < 0.34;
+  const notSupermanAtContact = isEasyMode() || (!state.supermanActive && state.supermanBlend < 0.2);
+  const hadMeaningfulAir = state.jumpAirTime > 0.11 && peakClearance > 6;
+
+  return launchFromUphill && hadMeaningfulAir && clearedBumpPeak && landingOnDescendingSlope && alignedPosture && notSupermanAtContact;
+}
+
+function finishComboPayout() {
+  if (state.comboCount <= 0 || state.comboPool <= 0) {
+    resetCombo();
+    updateHud();
+    return;
+  }
+
+  const payout = Math.round(state.comboPool * state.comboMultiplier);
+  state.totalScore += payout;
+  resetCombo();
+  updateHud();
+}
+
+function breakCombo() {
+  if (state.comboCount > 0) {
+    finishComboPayout();
+  } else {
+    resetCombo();
+    updateHud();
+  }
 }
 
 function evaluateLanding() {
@@ -496,28 +538,41 @@ function evaluateLanding() {
   state.vy = 0;
   state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
   state.terrainAngle = terrain;
+  state.prevGroundSlope = terrainSlope(state.worldX);
   state.suspensionVel -= 1.8;
 
-  const landedOnDescendingSlope = terrainSlope(state.worldX) < -0.02;
-  const validScoreJump = state.jumpFromBump && landedOnDescendingSlope;
+  const landingSlope = terrainSlope(state.worldX);
+  const safeLanding = Math.abs(pitchDelta) < 0.62 && angVel < physics.recoverableAngular;
 
-  if (validScoreJump) {
-    const jumpAward = computeJumpScore();
-    state.comboCount += 1;
-    state.comboMultiplier = Math.max(1, state.comboCount);
-    state.bestComboMultiplier = Math.max(state.bestComboMultiplier, state.comboMultiplier);
-    state.comboBank += jumpAward;
-    state.comboGraceTimer = COMBO_TIMEOUT;
-    addFloatingScore(`+${Math.round(jumpAward)}`, state.worldX - 18, state.riderY - 30);
-  } else if (state.comboCount > 0) {
-    state.comboGraceTimer = 0;
-    payoutCombo();
+  if (state.jumpActive) {
+    if (isPerfectLanding(landingSlope)) {
+      const jumpAward = computeJumpScore();
+      state.comboCount += 1;
+      state.comboMultiplier = state.comboCount;
+      state.bestComboMultiplier = Math.max(state.bestComboMultiplier, state.comboMultiplier);
+      state.comboPool += jumpAward;
+      addLandingFeedback("PERFECT", state.worldX - 10, state.riderY - 40);
+    } else {
+      addLandingFeedback("GOOD", state.worldX - 10, state.riderY - 40);
+      breakCombo();
+    }
+  } else {
+    breakCombo();
+  }
+
+  if (!safeLanding && !isEasyMode()) {
+    breakCombo();
   }
 
   updateComboBubble();
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
   state.jumpFromBump = false;
+  state.jumpActive = false;
+  state.jumpLaunchX = state.worldX;
+  state.jumpLaunchSlope = terrainSlope(state.worldX);
+  state.jumpPeakX = state.worldX;
+  state.jumpPeakSlope = state.jumpLaunchSlope;
 
   if (state.holdActive) {
     updateCharge(0.016, true);
@@ -532,7 +587,11 @@ function updateAirPhysics(dt) {
   state.vy += physics.gravity * dt;
   state.descending = state.vy > 0;
   state.jumpAirTime += dt;
-  state.jumpPeakY = Math.min(state.jumpPeakY, state.riderY);
+  if (state.riderY < state.jumpPeakY) {
+    state.jumpPeakY = state.riderY;
+    state.jumpPeakX = state.worldX;
+    state.jumpPeakSlope = terrainSlope(state.worldX);
+  }
 
   if (!state.holdActive || isEasyMode()) state.supermanActive = false;
   if (state.supermanActive) state.supermanHoldTime += dt;
@@ -570,7 +629,6 @@ function updateSuspension(dt) {
 
 function updateHud() {
   totalScore.textContent = Math.round(state.totalScore);
-  comboBankValue.textContent = Math.round(state.comboBank);
   timerValue.textContent = `${Math.max(0, state.timeLeft).toFixed(1)} s`;
   distanceValue.textContent = `${Math.round(state.distanceMeters)} m`;
   speedValue.textContent = `${state.displaySpeed.toFixed(1)} m/s`;
@@ -593,11 +651,6 @@ function update(dt) {
   else updateGroundPhysics(dt);
 
   if (!state.running) return;
-
-  if (state.comboGraceTimer > 0) {
-    state.comboGraceTimer -= dt;
-    if (state.comboGraceTimer <= 0) payoutCombo();
-  }
 
   const riderTop = state.riderY - 40;
   if (riderTop < 10 && state.vy < -3.6) state.vy = -3.6;

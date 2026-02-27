@@ -56,19 +56,6 @@ body {
   text-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
-.hud-combo-bank {
-  position: absolute;
-  top: calc(env(safe-area-inset-top) + 12px);
-  left: calc(env(safe-area-inset-left) + 12px);
-  min-width: 64px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(10, 14, 28, 0.58);
-  border: 1px solid rgba(236, 243, 255, 0.22);
-  font-size: clamp(1.15rem, 2.9vw, 1.55rem);
-  font-weight: 760;
-  text-align: left;
-}
 
 .hud-stats {
   position: absolute;
@@ -131,24 +118,22 @@ body {
   left: 0;
   top: 0;
   transform: translate(0, -50%);
-  font-weight: 760;
-  font-size: 1.2rem;
-  color: #ecf3ff;
-  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  color: rgba(236, 243, 255, 0.88);
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   opacity: 1;
 }
 
-.combo-transfer {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(0, 0);
-  font-size: 1.25rem;
-  font-weight: 760;
-  color: var(--good);
-  transition: transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 520ms ease;
-  opacity: 1;
+.landing-feedback[data-feedback="perfect"] {
+  color: #8cffd1;
 }
+
+.landing-feedback[data-feedback="good"] {
+  color: rgba(236, 243, 255, 0.82);
+}
+
 
 .hidden {
   opacity: 0;
