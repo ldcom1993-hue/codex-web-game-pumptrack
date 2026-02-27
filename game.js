@@ -128,7 +128,6 @@ const state = {
   birdTimer: 0,
   finishPulse: 0,
   finishFade: 0,
-  wheelRotation: 0,
 };
 
 let width = 0;
@@ -143,23 +142,6 @@ const parallaxMidObjects = [];
 const birds = [];
 
 const MID_OBJECT_TYPES = ["treeTall", "treeRound", "forest", "fence", "windmill", "barn", "bush", "animal"];
-
-const riderSprite = {
-  image: new Image(),
-  loaded: false,
-  source: {
-    rearWheel: { x: 432, y: 560, w: 248, h: 248 },
-    frontWheel: { x: 780, y: 560, w: 248, h: 248 },
-    bikeBody: { x: 552, y: 402, w: 452, h: 254 },
-    torso: { x: 560, y: 228, w: 454, h: 314 },
-    frontLeg: { x: 632, y: 488, w: 258, h: 226 },
-    rearLeg: { x: 560, y: 454, w: 272, h: 246 },
-  },
-};
-riderSprite.image.src = "./assets/sprites/rider_base.png";
-riderSprite.image.addEventListener("load", () => {
-  riderSprite.loaded = true;
-});
 
 function randomRange(min, max) {
   return min + Math.random() * (max - min);
@@ -334,7 +316,6 @@ function resetRun(mode = state.mode) {
   state.birdTimer = randomRange(PARALLAX.birdSpawnMin, PARALLAX.birdSpawnMax);
   state.finishPulse = 0;
   state.finishFade = 0;
-  state.wheelRotation = 0;
   birds.length = 0;
   floatingScores.length = 0;
   floatingLayer.innerHTML = "";
@@ -705,7 +686,6 @@ function update(dt) {
   state.finishPulse += dt * 4.2;
   state.timeLeft = Math.max(0, state.timeLeft - dt);
   state.displaySpeed += (state.vx - state.displaySpeed) * Math.min(1, dt * 8);
-  state.wheelRotation += (state.vx / Math.max(1, rider.wheelRadius)) * dt * 2.2;
 
   if (state.airborne) updateAirPhysics(dt);
   else updateGroundPhysics(dt);
@@ -1014,86 +994,141 @@ function drawChargeAboveRider(playerX, riderY) {
 function drawRider() {
   const playerScreenX = width * 0.3;
   const riderScreenX = state.worldX - state.cameraWorldX + playerScreenX;
-  const compression = Math.max(-1, Math.min(1, state.suspension * 40));
-  const riderY = state.riderY + compression * 9;
+  const compress = Math.max(-8, Math.min(8, state.suspension * 120));
+  const riderY = state.riderY + compress;
 
-  const pedalCadence = state.pedaling ? 10.5 : 3.2;
-  const pedalPhase = state.clock * pedalCadence + state.wheelRotation * 0.28;
-  const pedalWave = Math.sin(pedalPhase);
-  const bodyPedalBob = pedalWave * (state.pedaling ? 1.6 : 0.6);
-  const landingDip = Math.max(0, compression) * 1.5;
-  const jumpExtend = state.airborne ? Math.max(0, -state.vy * 0.22) : 0;
-  const jumpLeanBack = state.airborne ? Math.min(1, jumpExtend / 2.4) : 0;
+  const pedalSpeed = state.pedaling ? 8 : 2.6;
+  const pedalPhase = state.clock * pedalSpeed;
+  const crouch = state.pedaling && !state.airborne ? state.chargeRatio * 6 : 0;
+  const extend = state.airborne ? Math.max(-2.8, -state.vy * 0.11) : 0;
   const superman = isRiderMode() ? state.supermanBlend : 0;
-  const terrainVisualTilt = state.airborne ? state.angle : state.angle * 0.84 + state.terrainAngle * 0.16;
 
-  if (!riderSprite.loaded) {
-    drawChargeAboveRider(riderScreenX, riderY);
-    return;
-  }
+  const frontWheel = { x: 16, y: 16 };
+  const rearWheel = { x: -16, y: 16 };
+  const crank = { x: -1, y: 10 };
+  const pedalRadius = 6;
 
-  const wheelBaseX = {
-    rear: -16,
-    front: 16,
+  const footFront = {
+    x: crank.x + Math.cos(pedalPhase) * pedalRadius,
+    y: crank.y + Math.sin(pedalPhase) * pedalRadius,
   };
-  const wheelY = 16;
-  const spriteScale = 0.205;
-
-  const drawSpriteLayer = (part, x, y, rotation = 0, scaleX = 1, scaleY = 1) => {
-    const src = riderSprite.source[part];
-    if (!src) return;
-
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rotation);
-    ctx.scale(scaleX, scaleY);
-    ctx.drawImage(
-      riderSprite.image,
-      src.x,
-      src.y,
-      src.w,
-      src.h,
-      -src.w * 0.5 * spriteScale,
-      -src.h * 0.5 * spriteScale,
-      src.w * spriteScale,
-      src.h * spriteScale
-    );
-    ctx.restore();
+  const footBack = {
+    x: crank.x + Math.cos(pedalPhase + Math.PI) * pedalRadius,
+    y: crank.y + Math.sin(pedalPhase + Math.PI) * pedalRadius,
   };
 
   ctx.save();
   ctx.translate(riderScreenX, riderY);
-  ctx.rotate(terrainVisualTilt);
+  ctx.rotate(state.angle);
 
-  const wheelSpin = state.wheelRotation;
-  const legSwing = pedalWave * (0.15 + 0.12 * Number(state.pedaling));
-  const torsoShiftX = -jumpLeanBack * 3.8 + superman * 5.5;
-  const torsoShiftY = -landingDip - bodyPedalBob - jumpExtend * 0.8;
-  const torsoPitch = -jumpLeanBack * 0.22 + superman * 0.2 + pedalWave * 0.02;
+  const hip = { x: -1 - superman * 12, y: -crouch + extend + superman * 2.2 };
+  const shoulder = { x: 2 - superman * 20, y: -11 - crouch * 0.65 + extend * 0.45 + superman * 2.8 };
+  const head = { x: 4 - superman * 28, y: -22 - crouch * 0.3 + extend * 0.55 + superman * 3.2 };
+  const handlebar = { x: 12, y: 2 };
+  const seat = { x: -8, y: 5 };
+  const supermanReach = {
+    x: shoulder.x - 15 - superman * 8,
+    y: shoulder.y + 1.5 + superman * 0.8,
+  };
+  const supermanLegFront = {
+    x: hip.x - 17 - superman * 7,
+    y: hip.y + 7 + superman * 1.3,
+  };
+  const supermanLegBack = {
+    x: hip.x - 21 - superman * 7.5,
+    y: hip.y + 8.8 + superman * 1.4,
+  };
 
-  drawSpriteLayer("rearWheel", wheelBaseX.rear, wheelY + landingDip * 0.35, wheelSpin);
-  drawSpriteLayer("frontWheel", wheelBaseX.front, wheelY + landingDip * 0.6, wheelSpin);
-  drawSpriteLayer("bikeBody", 0, 0.2 + landingDip * 0.4, 0.01 + compression * 0.04);
+  ctx.strokeStyle = "rgba(13, 25, 32, 0.36)";
+  ctx.lineWidth = 6.8;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(rearWheel.x, rearWheel.y);
+  ctx.lineTo(seat.x, seat.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.closePath();
+  ctx.moveTo(seat.x, seat.y);
+  ctx.lineTo(handlebar.x, handlebar.y);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
+  ctx.stroke();
 
-  drawSpriteLayer("rearLeg", -2.5 - superman * 1.2, 2 + bodyPedalBob * 0.7, legSwing * 0.8, 1, 1 + compression * 0.05);
-  drawSpriteLayer("frontLeg", 1 + superman * 1.4, 1 + bodyPedalBob * 0.85, -legSwing, 1, 1 + compression * 0.04);
-  drawSpriteLayer(
-    "torso",
-    1.6 + torsoShiftX,
-    -6.7 + torsoShiftY,
-    torsoPitch,
-    1 + superman * 0.06,
-    1 + jumpExtend * 0.05
-  );
+  ctx.strokeStyle = "#2d5f76";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(rearWheel.x, rearWheel.y);
+  ctx.lineTo(seat.x, seat.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.closePath();
+  ctx.moveTo(seat.x, seat.y);
+  ctx.lineTo(handlebar.x, handlebar.y);
+  ctx.moveTo(crank.x, crank.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.stroke();
 
-  if (superman > 0.14) {
-    ctx.save();
-    ctx.globalAlpha = superman * 0.32;
-    ctx.fillStyle = "#9ff4ff";
-    ctx.beginPath();
-    ctx.ellipse(-8 - superman * 4, -15, 10 + superman * 4, 5 + superman * 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+  ctx.strokeStyle = "#f4f8ff";
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.arc(frontWheel.x, frontWheel.y, rider.wheelRadius * 0.58, 0, Math.PI * 2);
+  ctx.arc(rearWheel.x, rearWheel.y, rider.wheelRadius * 0.58, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#334d7f";
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.moveTo(crank.x, crank.y);
+  ctx.lineTo(footFront.x, footFront.y);
+  ctx.moveTo(crank.x, crank.y);
+  ctx.lineTo(footBack.x, footBack.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#163b4a";
+  ctx.lineWidth = 4.5;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
+  ctx.stroke();
+
+  ctx.fillStyle = "#f2f7ff";
+  ctx.beginPath();
+  ctx.arc(head.x, head.y, 7.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#2a446f";
+  ctx.lineWidth = 3.7;
+  ctx.beginPath();
+  const armFront = {
+    x: (handlebar.x - 1) * (1 - superman) + supermanReach.x * superman,
+    y: (handlebar.y + 1) * (1 - superman) + supermanReach.y * superman,
+  };
+  const legFront = {
+    x: footFront.x * (1 - superman) + supermanLegFront.x * superman,
+    y: footFront.y * (1 - superman) + supermanLegFront.y * superman,
+  };
+  const legBack = {
+    x: footBack.x * (1 - superman) + supermanLegBack.x * superman,
+    y: footBack.y * (1 - superman) + supermanLegBack.y * superman,
+  };
+
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.lineTo(armFront.x, armFront.y);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(legFront.x, legFront.y);
+  ctx.moveTo(hip.x + 0.8, hip.y + 0.4);
+  ctx.lineTo(legBack.x, legBack.y);
+  ctx.stroke();
+
+  if (superman > 0.16) {
+    ctx.strokeStyle = "rgba(126, 231, 255, 0.35)";
+    ctx.lineWidth = 1.8;
+    for (let i = 0; i < 3; i += 1) {
+      const offset = i * 4;
+      ctx.beginPath();
+      ctx.moveTo(head.x + 6 + offset, head.y + 1 + i * 1.5);
+      ctx.lineTo(head.x + 16 + offset * 1.5, head.y + 2 + i * 2);
+      ctx.stroke();
+    }
   }
 
   ctx.restore();
