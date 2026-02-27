@@ -152,6 +152,29 @@ body {
   backdrop-filter: blur(4px);
 }
 
+
+.finish-card {
+  display: grid;
+  gap: 6px;
+}
+
+.finish-stat {
+  margin: 0;
+  font-size: 0.98rem;
+  color: color-mix(in oklab, var(--muted), #ffffff 18%);
+}
+
+.finish-stat strong {
+  margin-left: 8px;
+  font-size: 1.3rem;
+  color: #f3f8ff;
+}
+
+.finish-distance strong {
+  font-size: 1.1rem;
+  color: #d9efdf;
+}
+
 .menu-actions {
   display: grid;
   gap: 12px;
