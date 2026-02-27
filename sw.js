@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v17";
+const CACHE_VERSION = "v18";
 const CACHE_NAME = `pump-flow-${CACHE_VERSION}`;
 const CORE_ASSETS = ["./", "./index.html", "./styles.css", "./game.js", "./manifest.webmanifest", "./assets/icon.svg"];
 
