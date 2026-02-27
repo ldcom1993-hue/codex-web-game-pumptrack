@@ -6,7 +6,7 @@ Pump Flow is a mobile-first pumptrack riding game built with vanilla HTML, CSS, 
 
 - **Hold touch on downslopes** to pump and accelerate.
 - **Release near crests** to pop into the air.
-- **Tap while airborne** for extra style through flips.
+- **Hold while ascending in the air** to perform a risky Superman trick and release before touchdown.
 - Land cleanly to keep your streak and maximize score.
 - Reach checkpoints to secure fast crash restarts.
 
