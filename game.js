@@ -10,6 +10,7 @@ const floatingLayer = document.getElementById("floatingLayer");
 const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
 const finalScore = document.getElementById("finalScore");
+const finalDistance = document.getElementById("finalDistance");
 const rotateNotice = document.getElementById("rotateNotice");
 
 const easyModeButton = document.getElementById("easyModeButton");
@@ -30,7 +31,7 @@ const MODES = {
 };
 
 const RUN_DURATION = 60;
-const BEST_SCORE_KEY = "flowline-rider-v0.15.0-best-score";
+const BEST_SCORE_KEY = "flowline-rider-v0.15.1-best-score";
 
 const PARALLAX = {
   hillsSpeed: 0.16,
@@ -125,6 +126,8 @@ const state = {
   timeLeft: RUN_DURATION,
   prevGroundSlope: 0,
   birdTimer: 0,
+  finishPulse: 0,
+  finishFade: 0,
 };
 
 let width = 0;
@@ -311,6 +314,8 @@ function resetRun(mode = state.mode) {
   state.timeLeft = RUN_DURATION;
   state.prevGroundSlope = terrainSlope(0);
   state.birdTimer = randomRange(PARALLAX.birdSpawnMin, PARALLAX.birdSpawnMax);
+  state.finishPulse = 0;
+  state.finishFade = 0;
   birds.length = 0;
   floatingScores.length = 0;
   floatingLayer.innerHTML = "";
@@ -346,6 +351,7 @@ function endRun() {
   }
 
   finalScore.textContent = Math.round(state.totalScore);
+  finalDistance.textContent = `${Math.round(state.distanceMeters)} m`;
   gameOverScreen.classList.add("visible");
 }
 
@@ -677,6 +683,7 @@ function update(dt) {
   if (!state.running || state.orientationBlocked || runMenuOpen) return;
 
   state.clock += dt;
+  state.finishPulse += dt * 4.2;
   state.timeLeft = Math.max(0, state.timeLeft - dt);
   state.displaySpeed += (state.vx - state.displaySpeed) * Math.min(1, dt * 8);
 
@@ -684,6 +691,9 @@ function update(dt) {
   else updateGroundPhysics(dt);
 
   if (!state.running) return;
+
+  const finishProgress = 1 - state.timeLeft / RUN_DURATION;
+  state.finishFade += (Math.max(0, finishProgress - 0.88) - state.finishFade) * Math.min(1, dt * 3.2);
 
   state.birdTimer -= dt;
   if (state.birdTimer <= 0) {
@@ -874,15 +884,19 @@ function drawBackground() {
 
   for (const bird of birds) drawBird(bird);
 
-  const horizon = height * 0.71;
+  const horizon = height * 0.68;
   const hillOffset = state.cameraWorldX * PARALLAX.hillsSpeed;
 
-  ctx.fillStyle = "#8db49a";
+  ctx.fillStyle = "#a8c4b2";
   ctx.beginPath();
-  ctx.moveTo(0, horizon + 8);
-  for (let x = -10; x <= width + 10; x += 12) {
+  ctx.moveTo(0, horizon + 10);
+  for (let x = -10; x <= width + 10; x += 10) {
     const world = x + hillOffset;
-    const y = horizon + Math.sin(world * 0.0035) * 22 + Math.sin(world * 0.0017 + 1.6) * 15;
+    const y =
+      horizon - 176 +
+      Math.sin(world * 0.0022) * 42 +
+      Math.sin(world * 0.0009 + 1.5) * 28 +
+      Math.sin(world * 0.004 + 0.4) * 10;
     ctx.lineTo(x, y);
   }
   ctx.lineTo(width, height);
@@ -890,12 +904,16 @@ function drawBackground() {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = "#769f84";
+  ctx.fillStyle = "#90af9c";
   ctx.beginPath();
-  ctx.moveTo(0, horizon + 38);
-  for (let x = -10; x <= width + 10; x += 10) {
-    const world = x + hillOffset * 1.15;
-    const y = horizon + 36 + Math.sin(world * 0.0049 + 0.4) * 18 + Math.sin(world * 0.0021) * 12;
+  ctx.moveTo(0, horizon + 36);
+  for (let x = -10; x <= width + 10; x += 8) {
+    const world = x + hillOffset * 1.24;
+    const y =
+      horizon - 126 +
+      Math.sin(world * 0.0035 + 0.2) * 34 +
+      Math.sin(world * 0.0013 + 2) * 24 +
+      Math.sin(world * 0.006 + 0.9) * 8;
     ctx.lineTo(x, y);
   }
   ctx.lineTo(width, height);
@@ -1021,7 +1039,21 @@ function drawRider() {
     y: hip.y + 8.8 + superman * 1.4,
   };
 
-  ctx.strokeStyle = "#8fe8ff";
+  ctx.strokeStyle = "rgba(13, 25, 32, 0.36)";
+  ctx.lineWidth = 6.8;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(rearWheel.x, rearWheel.y);
+  ctx.lineTo(seat.x, seat.y);
+  ctx.lineTo(frontWheel.x, frontWheel.y);
+  ctx.closePath();
+  ctx.moveTo(seat.x, seat.y);
+  ctx.lineTo(handlebar.x, handlebar.y);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(shoulder.x, shoulder.y);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#2d5f76";
   ctx.lineWidth = 2.6;
   ctx.beginPath();
   ctx.moveTo(rearWheel.x, rearWheel.y);
@@ -1034,14 +1066,14 @@ function drawRider() {
   ctx.lineTo(frontWheel.x, frontWheel.y);
   ctx.stroke();
 
-  ctx.strokeStyle = "#ecf3ff";
+  ctx.strokeStyle = "#f4f8ff";
   ctx.lineWidth = 1.8;
   ctx.beginPath();
   ctx.arc(frontWheel.x, frontWheel.y, rider.wheelRadius * 0.58, 0, Math.PI * 2);
   ctx.arc(rearWheel.x, rearWheel.y, rider.wheelRadius * 0.58, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "#9dafff";
+  ctx.strokeStyle = "#334d7f";
   ctx.lineWidth = 2.8;
   ctx.beginPath();
   ctx.moveTo(crank.x, crank.y);
@@ -1050,7 +1082,7 @@ function drawRider() {
   ctx.lineTo(footBack.x, footBack.y);
   ctx.stroke();
 
-  ctx.strokeStyle = "#7ee7ff";
+  ctx.strokeStyle = "#163b4a";
   ctx.lineWidth = 4.5;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -1058,12 +1090,12 @@ function drawRider() {
   ctx.lineTo(shoulder.x, shoulder.y);
   ctx.stroke();
 
-  ctx.fillStyle = "#d9e7ff";
+  ctx.fillStyle = "#f2f7ff";
   ctx.beginPath();
   ctx.arc(head.x, head.y, 7.3, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = "#9dafff";
+  ctx.strokeStyle = "#2a446f";
   ctx.lineWidth = 3.7;
   ctx.beginPath();
   const armFront = {
@@ -1103,6 +1135,47 @@ function drawRider() {
   drawChargeAboveRider(riderScreenX, riderY);
 }
 
+
+function drawFinishIndicator() {
+  if (!state.running && state.finishFade <= 0.02) return;
+
+  const indicatorWorldX = state.worldX + 56;
+  const playerScreenX = width * 0.3;
+  const indicatorX = indicatorWorldX - state.cameraWorldX + playerScreenX;
+  const baseY = state.riderY - 56;
+  const visible = Math.min(1, Math.max(0, state.finishFade * 1.35));
+  const flutter = Math.sin(state.finishPulse) * 2.6;
+  if (visible < 0.03) return;
+
+  ctx.save();
+  ctx.globalAlpha = visible;
+
+  ctx.strokeStyle = "rgba(44, 62, 52, 0.85)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(indicatorX, baseY + 34);
+  ctx.lineTo(indicatorX, baseY - 20);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(232, 245, 235, 0.95)";
+  ctx.beginPath();
+  ctx.moveTo(indicatorX + 2, baseY - 16);
+  ctx.quadraticCurveTo(indicatorX + 17, baseY - 21 + flutter * 0.3, indicatorX + 28, baseY - 13 + flutter);
+  ctx.quadraticCurveTo(indicatorX + 18, baseY - 3 + flutter * 0.2, indicatorX + 2, baseY - 7);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(121, 163, 132, 0.95)";
+  ctx.fillRect(indicatorX + 11, baseY - 14, 6, 6);
+  ctx.fillStyle = "rgba(66, 108, 80, 0.95)";
+  ctx.fillRect(indicatorX + 17, baseY - 14, 6, 6);
+  ctx.fillRect(indicatorX + 11, baseY - 8, 6, 6);
+  ctx.fillStyle = "rgba(232, 245, 235, 0.95)";
+  ctx.fillRect(indicatorX + 17, baseY - 8, 6, 6);
+
+  ctx.restore();
+}
+
 function frame(ts) {
   const dt = Math.min(0.033, (ts - lastTime) / 1000 || 0.016);
   lastTime = ts;
@@ -1121,6 +1194,7 @@ function frame(ts) {
     ctx.translate(-cx, -cy);
     drawTrack();
     drawRider();
+    drawFinishIndicator();
     ctx.restore();
   }
 

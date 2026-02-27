@@ -29,7 +29,7 @@
       <section id="floatingLayer" class="floating-layer" aria-hidden="true"></section>
 
       <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open run menu">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.15.0</p>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.15.1</p>
 
       <section id="runMenu" class="run-menu" aria-hidden="true">
         <div class="run-menu-card" role="dialog" aria-modal="true" aria-labelledby="runMenuTitle">
@@ -57,9 +57,10 @@
       </section>
 
       <section id="gameOver" class="overlay">
-        <div class="card">
-          <h2>Run Complete</h2>
-          <p>Final score: <strong id="finalScore">0</strong></p>
+        <div class="card finish-card">
+          <h2>🏁 Run Complete</h2>
+          <p class="finish-stat">Final Score <strong id="finalScore">0</strong></p>
+          <p class="finish-stat finish-distance">Distance <strong id="finalDistance">0 m</strong></p>
           <button id="restartButton" class="btn" type="button">Restart</button>
           <button id="menuButton" class="btn btn-muted" type="button">Return to Menu</button>
         </div>
