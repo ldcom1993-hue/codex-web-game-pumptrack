@@ -21,24 +21,30 @@
 
       <section id="hud" class="hud hidden" aria-live="polite">
         <div class="hud-score" id="totalScore">0</div>
+        <div class="hud-combo-bank" id="comboBankValue">0</div>
+        <div class="hud-stats" id="statsDisplay">
+          <span id="distanceValue">0 m</span>
+          <span id="speedValue">0.0 m/s</span>
+        </div>
         <div class="combo-bubble" id="comboBubble">x1</div>
-        <div class="hud-timer" id="timerValue">60.0</div>
+        <div class="hud-timer" id="timerValue">60.0 s</div>
       </section>
 
       <section id="floatingLayer" class="floating-layer" aria-hidden="true"></section>
 
-      <button id="tuningToggle" class="tuning-toggle" type="button" aria-label="Open tuning panel">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.13.0</p>
+      <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open run menu">⚙</button>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.13.1</p>
 
-      <section id="tuningPanel" class="tuning-panel" aria-hidden="true">
-        <div class="tuning-card" role="dialog" aria-modal="true" aria-labelledby="tuningTitle">
-          <div class="tuning-header">
-            <h2 id="tuningTitle">Tuning</h2>
-            <button id="tuningClose" class="icon-btn" type="button" aria-label="Close tuning panel">✕</button>
+      <section id="runMenu" class="run-menu" aria-hidden="true">
+        <div class="run-menu-card" role="dialog" aria-modal="true" aria-labelledby="runMenuTitle">
+          <div class="run-menu-header">
+            <h2 id="runMenuTitle">Run Menu</h2>
+            <button id="runMenuClose" class="icon-btn" type="button" aria-label="Close run menu">✕</button>
           </div>
-          <div id="tuningControls" class="tuning-controls"></div>
-          <div class="tuning-actions">
-            <button id="resetTuning" class="btn btn-muted" type="button">Reset to Defaults</button>
+          <div class="run-menu-actions">
+            <button id="menuRestart" class="btn" type="button">Restart</button>
+            <button id="menuBestScore" class="btn btn-muted" type="button">Best Score: 0</button>
+            <button id="menuChangeMode" class="btn btn-muted" type="button">Change Mode</button>
           </div>
         </div>
       </section>
