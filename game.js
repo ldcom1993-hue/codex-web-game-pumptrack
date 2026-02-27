@@ -2,23 +2,35 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
 const hud = document.getElementById("hud");
-const speedValue = document.getElementById("speedValue");
+const totalScore = document.getElementById("totalScore");
+const timerValue = document.getElementById("timerValue");
+const comboBubble = document.getElementById("comboBubble");
+const floatingLayer = document.getElementById("floatingLayer");
 const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
-const gameOverTitle = document.getElementById("gameOverTitle");
 const finalScore = document.getElementById("finalScore");
-const feedback = document.getElementById("feedback");
+const bestCombo = document.getElementById("bestCombo");
 const rotateNotice = document.getElementById("rotateNotice");
 
-const startButton = document.getElementById("startButton");
+const easyModeButton = document.getElementById("easyModeButton");
+const riderModeButton = document.getElementById("riderModeButton");
 const restartButton = document.getElementById("restartButton");
+const menuButton = document.getElementById("menuButton");
+
 const tuningToggle = document.getElementById("tuningToggle");
 const tuningPanel = document.getElementById("tuningPanel");
 const tuningClose = document.getElementById("tuningClose");
 const tuningControls = document.getElementById("tuningControls");
 const resetTuning = document.getElementById("resetTuning");
 
-const STORAGE_KEY = "flowline-rider-v0.12.1-tuning";
+const MODES = {
+  EASY: "easy",
+  RIDER: "rider",
+};
+
+const RUN_DURATION = 60;
+const COMBO_TIMEOUT = 1.8;
+const STORAGE_KEY = "flowline-rider-v0.13.0-tuning";
 
 const physics = {
   gravity: 28,
@@ -82,6 +94,7 @@ const tuningSchema = [
 ];
 
 const state = {
+  mode: MODES.RIDER,
   running: false,
   over: false,
   orientationBlocked: false,
@@ -97,19 +110,23 @@ const state = {
   supermanBlend: 0,
   supermanHoldTime: 0,
   jumpAirTime: 0,
-  jumpCombo: 0,
   charge: 0,
   chargeRatio: 0,
   angle: 0,
   angularVelocity: 0,
   terrainAngle: 0,
-  score: 0,
+  totalScore: 0,
+  comboCount: 0,
+  comboMultiplier: 1,
+  comboBank: 0,
+  comboGraceTimer: 0,
+  bestComboMultiplier: 1,
   displaySpeed: 0,
   suspension: 0,
   suspensionVel: 0,
-  tipTimer: 0,
   clock: 0,
   cameraWorldX: 0,
+  timeLeft: RUN_DURATION,
 };
 
 let width = 0;
@@ -117,9 +134,18 @@ let height = 0;
 let dpr = 1;
 let lastTime = 0;
 let tuningPanelOpen = false;
+const floatingScores = [];
 
 function isLandscape() {
   return window.matchMedia("(orientation: landscape)").matches;
+}
+
+function isEasyMode() {
+  return state.mode === MODES.EASY;
+}
+
+function isRiderMode() {
+  return state.mode === MODES.RIDER;
 }
 
 function handleOrientation() {
@@ -225,9 +251,7 @@ function makeTuningControl(config) {
 
 function buildTuningUI() {
   tuningControls.innerHTML = "";
-  for (const config of tuningSchema) {
-    makeTuningControl(config);
-  }
+  for (const config of tuningSchema) makeTuningControl(config);
 }
 
 function openTuningPanel() {
@@ -242,7 +266,16 @@ function closeTuningPanel() {
   tuningPanel.setAttribute("aria-hidden", "true");
 }
 
-function resetRun() {
+function resetCombo() {
+  state.comboCount = 0;
+  state.comboMultiplier = 1;
+  state.comboBank = 0;
+  state.comboGraceTimer = 0;
+  comboBubble.classList.remove("visible");
+}
+
+function resetRun(mode = state.mode) {
+  state.mode = mode;
   state.over = false;
   state.running = true;
   state.worldX = 0;
@@ -257,27 +290,40 @@ function resetRun() {
   state.supermanBlend = 0;
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
-  state.jumpCombo = 0;
   state.charge = 0;
   state.chargeRatio = 0;
   state.angle = terrainAngle(0);
   state.angularVelocity = 0;
   state.terrainAngle = state.angle;
   state.riderY = terrainY(0) - rider.wheelRadius - rider.bodyHeight;
-  state.score = 0;
+  state.totalScore = 0;
+  state.bestComboMultiplier = 1;
   state.displaySpeed = 0;
   state.suspension = 0;
   state.suspensionVel = 0;
-  state.tipTimer = 0;
   state.clock = 0;
+  state.timeLeft = RUN_DURATION;
+  floatingScores.length = 0;
+  floatingLayer.innerHTML = "";
 
+  resetCombo();
   updateHud();
   startScreen.classList.remove("visible");
   gameOverScreen.classList.remove("visible");
   hud.classList.remove("hidden");
 }
 
-function endRun(crash = false) {
+function showMenu() {
+  state.running = false;
+  state.over = false;
+  resetCombo();
+  hud.classList.add("hidden");
+  gameOverScreen.classList.remove("visible");
+  startScreen.classList.add("visible");
+}
+
+function endRun() {
+  payoutCombo(true);
   state.running = false;
   state.over = true;
   state.holdActive = false;
@@ -285,26 +331,79 @@ function endRun(crash = false) {
   state.charge = 0;
   state.chargeRatio = 0;
 
-  gameOverTitle.textContent = crash ? "Crash" : "Ride Complete";
-  finalScore.textContent = Math.round(state.score);
+  finalScore.textContent = Math.round(state.totalScore);
+  bestCombo.textContent = `x${state.bestComboMultiplier}`;
   gameOverScreen.classList.add("visible");
 }
 
-function showFeedback(text, kind = "normal", duration = 700) {
-  feedback.textContent = text;
-  feedback.classList.add("visible");
-  feedback.classList.toggle("crash", kind === "crash");
-  clearTimeout(showFeedback.timer);
-  showFeedback.timer = setTimeout(() => feedback.classList.remove("visible"), duration);
+function addFloatingScore(text, worldX, worldY, payout = false) {
+  const node = document.createElement("div");
+  node.className = `floating-score${payout ? " payout" : ""}`;
+  node.textContent = text;
+  floatingLayer.appendChild(node);
+
+  floatingScores.push({
+    node,
+    worldX,
+    worldY,
+    age: 0,
+    ttl: payout ? 1.2 : 1,
+    drift: payout ? 42 : 30,
+  });
+}
+
+function updateFloatingScores(dt) {
+  const playerScreenX = width * 0.3;
+  const startX = state.cameraWorldX - playerScreenX;
+
+  for (let i = floatingScores.length - 1; i >= 0; i -= 1) {
+    const item = floatingScores[i];
+    item.age += dt;
+    const progress = Math.min(1, item.age / item.ttl);
+    const x = item.worldX - startX;
+    const y = item.worldY - progress * item.drift;
+
+    item.node.style.left = `${x}px`;
+    item.node.style.top = `${y}px`;
+    item.node.style.opacity = String(1 - progress);
+
+    if (item.age >= item.ttl) {
+      item.node.remove();
+      floatingScores.splice(i, 1);
+    }
+  }
+}
+
+function updateComboBubble() {
+  if (state.comboCount > 0) {
+    comboBubble.textContent = `x${state.comboMultiplier}`;
+    comboBubble.classList.add("visible");
+  } else {
+    comboBubble.classList.remove("visible");
+  }
+}
+
+function payoutCombo(force = false) {
+  if (state.comboCount <= 0 || state.comboBank <= 0) {
+    if (force) resetCombo();
+    return;
+  }
+
+  if (!force && state.comboGraceTimer > 0) return;
+
+  const payout = state.comboBank * state.comboMultiplier;
+  state.totalScore += payout;
+  addFloatingScore(`+${Math.round(payout)}`, state.worldX, state.riderY - 38, true);
+  resetCombo();
+  updateHud();
 }
 
 function onPressStart() {
   if (!state.running || state.orientationBlocked || tuningPanelOpen) return;
   state.holdActive = true;
 
-  if (state.airborne && !state.descending) {
+  if (isRiderMode() && state.airborne && !state.descending) {
     state.supermanActive = true;
-    showFeedback("Superman", "normal", 320);
   }
 }
 
@@ -328,9 +427,7 @@ function applyJumpFromCharge() {
   state.chargeRatio = 0;
 
   const riderTop = state.riderY - 34;
-  if (riderTop < 24) {
-    state.vy = Math.min(state.vy, -4.2);
-  }
+  if (riderTop < 24) state.vy = Math.min(state.vy, -4.2);
 }
 
 function onPressEnd() {
@@ -351,16 +448,9 @@ function onPressEnd() {
   }
 }
 
-function crash(reason) {
-  showFeedback(reason, "crash", 1100);
-  endRun(true);
-}
-
 function updateCharge(dt, canCharge) {
   state.pedaling = state.holdActive && canCharge;
-  if (state.pedaling) {
-    state.charge = Math.min(physics.chargeCapSeconds, state.charge + dt);
-  }
+  if (state.pedaling) state.charge = Math.min(physics.chargeCapSeconds, state.charge + dt);
   state.chargeRatio += (Math.min(1, state.charge / physics.chargeCapSeconds) - state.chargeRatio) * Math.min(1, dt * 16);
 }
 
@@ -373,9 +463,7 @@ function updateGroundPhysics(dt) {
   state.vx += gravityAlong * dt;
 
   updateCharge(dt, true);
-  if (state.pedaling) {
-    state.vx += physics.pedalAccel * dt;
-  }
+  if (state.pedaling) state.vx += physics.pedalAccel * dt;
 
   const friction = physics.rollingFriction * dt;
   if (state.vx > friction) state.vx -= friction;
@@ -386,8 +474,7 @@ function updateGroundPhysics(dt) {
   state.worldX += state.vx * dt * 60;
 
   state.terrainAngle = terrainAngle(state.worldX);
-  const targetY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
-  state.riderY = targetY;
+  state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
 
   const crouchBias = state.pedaling ? state.chargeRatio * 0.18 : 0;
   const targetAngle = state.terrainAngle - crouchBias;
@@ -397,37 +484,31 @@ function updateGroundPhysics(dt) {
   state.angularVelocity += stabilizeTorque * dt;
   state.angle += state.angularVelocity * dt;
 
-  const comProjection = Math.sin(normalizeAngle(state.angle - state.terrainAngle)) * rider.comHeight;
-  const supportHalf = rider.wheelBase * 0.5;
-  if (Math.abs(comProjection) > supportHalf) {
-    state.tipTimer += dt;
-  } else {
-    state.tipTimer = Math.max(0, state.tipTimer - dt * 2);
-  }
-
-  if (Math.abs(normalizeAngle(state.angle - state.terrainAngle)) > physics.hardCrashPitch || state.tipTimer > 0.28) {
-    crash("Lost balance");
+  if (isEasyMode()) {
+    state.angle += normalizeAngle(state.terrainAngle - state.angle) * Math.min(1, dt * 8.5);
+    state.angularVelocity *= Math.max(0, 1 - dt * 8);
   }
 }
 
 function evaluateLanding() {
-  if (state.supermanBlend > 0.25 || state.supermanActive) {
-    crash("Held Superman on landing");
-    return;
-  }
-
   const terrain = terrainAngle(state.worldX);
   const pitchDelta = normalizeAngle(state.angle - terrain);
   const angVel = Math.abs(state.angularVelocity);
 
-  if (Math.abs(pitchDelta) > physics.hardCrashPitch || angVel > physics.hardCrashAngular) {
-    crash("Hard impact");
-    return;
-  }
+  if (isRiderMode()) {
+    if (state.supermanBlend > 0.25 || state.supermanActive) {
+      endRun();
+      return;
+    }
 
-  if (Math.abs(pitchDelta) > physics.recoverablePitch && angVel > physics.recoverableAngular) {
-    crash("Could not recover");
-    return;
+    if (
+      Math.abs(pitchDelta) > physics.hardCrashPitch ||
+      angVel > physics.hardCrashAngular ||
+      (Math.abs(pitchDelta) > physics.recoverablePitch && angVel > physics.recoverableAngular)
+    ) {
+      endRun();
+      return;
+    }
   }
 
   state.airborne = false;
@@ -435,21 +516,19 @@ function evaluateLanding() {
   state.riderY = terrainY(state.worldX) - rider.wheelRadius - rider.bodyHeight;
   state.terrainAngle = terrain;
   state.suspensionVel -= 1.8;
-  state.tipTimer = 0;
 
-  const airTimeBase = 30 + state.jumpAirTime * 34;
-  const supermanBonus = state.supermanHoldTime * 120;
-  const comboMultiplier = 1 + Math.min(2, state.jumpCombo * 0.25);
-  const jumpAward = (airTimeBase + supermanBonus) * comboMultiplier;
-  state.score += jumpAward;
+  const airTimeBase = 34 + state.jumpAirTime * 36;
+  const supermanBonus = isRiderMode() ? state.supermanHoldTime * 120 : 0;
+  const jumpAward = airTimeBase + supermanBonus;
 
-  if (state.supermanHoldTime > 0.06) {
-    state.jumpCombo += 1;
-    showFeedback(`Landing +${Math.round(jumpAward)} (x${comboMultiplier.toFixed(2)})`, "normal", 520);
-  } else {
-    state.jumpCombo = 0;
-    showFeedback(`Landing +${Math.round(jumpAward)}`, "normal", 420);
-  }
+  state.comboCount += 1;
+  state.comboMultiplier = Math.max(1, state.comboCount);
+  state.bestComboMultiplier = Math.max(state.bestComboMultiplier, state.comboMultiplier);
+  state.comboBank += jumpAward;
+  state.comboGraceTimer = COMBO_TIMEOUT;
+
+  addFloatingScore(`+${Math.round(jumpAward)}`, state.worldX, state.riderY - 34);
+  updateComboBubble();
 
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
@@ -468,13 +547,8 @@ function updateAirPhysics(dt) {
   state.descending = state.vy > 0;
   state.jumpAirTime += dt;
 
-  if (!state.holdActive) {
-    state.supermanActive = false;
-  }
-
-  if (state.supermanActive) {
-    state.supermanHoldTime += dt;
-  }
+  if (!state.holdActive || isEasyMode()) state.supermanActive = false;
+  if (state.supermanActive) state.supermanHoldTime += dt;
 
   const supermanTarget = state.supermanActive ? 1 : 0;
   const blendRate = state.supermanActive ? 8 : 18;
@@ -484,6 +558,11 @@ function updateAirPhysics(dt) {
 
   state.angularVelocity *= Math.max(0, 1 - physics.airbornePitchDamping * dt);
   state.angle += state.angularVelocity * dt;
+
+  if (isEasyMode()) {
+    state.angle += normalizeAngle(state.terrainAngle - state.angle) * Math.min(1, dt * 4.8);
+    state.angularVelocity *= Math.max(0, 1 - dt * 4);
+  }
 
   state.vx = Math.max(physics.minSpeed, state.vx - physics.airDrag * dt);
   state.worldX += state.vx * dt * 60;
@@ -503,8 +582,9 @@ function updateSuspension(dt) {
 }
 
 function updateHud() {
-  state.displaySpeed += (state.vx - state.displaySpeed) * 0.18;
-  speedValue.textContent = state.displaySpeed.toFixed(1);
+  totalScore.textContent = Math.round(state.totalScore);
+  timerValue.textContent = Math.max(0, state.timeLeft).toFixed(1);
+  updateComboBubble();
 }
 
 function updateCamera(dt) {
@@ -516,34 +596,60 @@ function update(dt) {
   if (!state.running || state.orientationBlocked || tuningPanelOpen) return;
 
   state.clock += dt;
+  state.timeLeft = Math.max(0, state.timeLeft - dt);
+
   if (state.airborne) updateAirPhysics(dt);
   else updateGroundPhysics(dt);
 
   if (!state.running) return;
 
-  const riderTop = state.riderY - 40;
-  if (riderTop < 10 && state.vy < -3.6) {
-    state.vy = -3.6;
+  if (state.comboGraceTimer > 0) {
+    state.comboGraceTimer -= dt;
+    if (state.comboGraceTimer <= 0) payoutCombo();
   }
+
+  const riderTop = state.riderY - 40;
+  if (riderTop < 10 && state.vy < -3.6) state.vy = -3.6;
 
   updateSuspension(dt);
   updateCamera(dt);
-  state.score += state.vx * dt * (state.airborne ? 0.9 : 1.2);
+  updateFloatingScores(dt);
   updateHud();
+
+  if (state.timeLeft <= 0) endRun();
 }
 
 function drawBackground() {
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, "#101a35");
+  grad.addColorStop(0, "#0d1732");
+  grad.addColorStop(0.55, "#0a1227");
   grad.addColorStop(1, "#090e1d");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 
-  ctx.fillStyle = "rgba(126, 231, 255, 0.06)";
-  for (let i = 0; i < 4; i += 1) {
-    const y = height * 0.16 + i * 90 + Math.sin(state.clock * 0.35 + i * 0.8) * 8;
-    ctx.fillRect(0, y, width, 2);
+  ctx.fillStyle = "rgba(135, 179, 113, 0.16)";
+  ctx.beginPath();
+  ctx.moveTo(0, height * 0.68);
+  for (let x = 0; x <= width; x += 8) {
+    const y = height * 0.68 + Math.sin((x + state.clock * 26) * 0.005) * 8;
+    ctx.lineTo(x, y);
   }
+  ctx.lineTo(width, height);
+  ctx.lineTo(0, height);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(162, 196, 142, 0.14)";
+  ctx.beginPath();
+  ctx.moveTo(0, height * 0.76);
+  for (let x = 0; x <= width; x += 10) {
+    const y = height * 0.76 + Math.sin((x + 120 + state.clock * 18) * 0.004) * 10;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(width, height);
+  ctx.lineTo(0, height);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawTrack() {
@@ -562,9 +668,9 @@ function drawTrack() {
   ctx.lineTo(-120, height + 120);
   ctx.closePath();
 
-  const fill = ctx.createLinearGradient(0, height * 0.4, 0, height);
-  fill.addColorStop(0, "#243260");
-  fill.addColorStop(1, "#0f1730");
+  const fill = ctx.createLinearGradient(0, height * 0.44, 0, height);
+  fill.addColorStop(0, "#2f4e2f");
+  fill.addColorStop(1, "#18291d");
   ctx.fillStyle = fill;
   ctx.fill();
 
@@ -576,7 +682,7 @@ function drawTrack() {
     else ctx.lineTo(x, y);
   }
   ctx.lineWidth = 4;
-  ctx.strokeStyle = "#8fe8ff";
+  ctx.strokeStyle = "#bde5b6";
   ctx.stroke();
 }
 
@@ -617,7 +723,7 @@ function drawRider() {
   const pedalPhase = state.clock * pedalSpeed;
   const crouch = state.pedaling && !state.airborne ? state.chargeRatio * 6 : 0;
   const extend = state.airborne ? Math.max(-2.8, -state.vy * 0.11) : 0;
-  const superman = state.supermanBlend;
+  const superman = isRiderMode() ? state.supermanBlend : 0;
 
   const frontWheel = { x: 16, y: 16 };
   const rearWheel = { x: -16, y: 16 };
@@ -734,23 +840,7 @@ function drawRider() {
   }
 
   ctx.restore();
-
   drawChargeAboveRider(riderScreenX, riderY);
-}
-
-function drawOverlayTelemetry() {
-  ctx.fillStyle = "rgba(236,243,255,0.9)";
-  ctx.font = "600 13px Inter, system-ui";
-  const status = state.supermanBlend > 0.15
-    ? "Superman"
-    : state.airborne
-      ? state.descending
-        ? "Air / Descend"
-        : "Air / Ascend"
-      : state.pedaling
-        ? "Pedaling"
-        : "Coasting";
-  ctx.fillText(`State: ${status}`, 16, height - 18);
 }
 
 function frame(ts) {
@@ -771,7 +861,6 @@ function frame(ts) {
     ctx.translate(-cx, -cy);
     drawTrack();
     drawRider();
-    drawOverlayTelemetry();
     ctx.restore();
   }
 
@@ -789,8 +878,11 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-startButton.addEventListener("click", resetRun);
-restartButton.addEventListener("click", resetRun);
+easyModeButton.addEventListener("click", () => resetRun(MODES.EASY));
+riderModeButton.addEventListener("click", () => resetRun(MODES.RIDER));
+restartButton.addEventListener("click", () => resetRun(state.mode));
+menuButton.addEventListener("click", showMenu);
+
 window.addEventListener("pointerdown", onPressStart, { passive: true });
 window.addEventListener("pointerup", onPressEnd, { passive: true });
 window.addEventListener("pointercancel", onPressEnd, { passive: true });
@@ -803,6 +895,7 @@ tuningToggle.addEventListener("click", () => {
   if (tuningPanelOpen) closeTuningPanel();
   else openTuningPanel();
 });
+
 tuningClose.addEventListener("click", closeTuningPanel);
 tuningPanel.addEventListener("click", (event) => {
   if (event.target === tuningPanel) closeTuningPanel();
@@ -832,4 +925,5 @@ syncPhysicsWithTuning();
 buildTuningUI();
 resize();
 handleOrientation();
+updateHud();
 requestAnimationFrame(frame);

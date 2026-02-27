@@ -20,11 +20,15 @@
       </section>
 
       <section id="hud" class="hud hidden" aria-live="polite">
-        <div class="pill">Speed <span id="speedValue">0</span> m/s</div>
+        <div class="hud-score" id="totalScore">0</div>
+        <div class="combo-bubble" id="comboBubble">x1</div>
+        <div class="hud-timer" id="timerValue">60.0</div>
       </section>
 
+      <section id="floatingLayer" class="floating-layer" aria-hidden="true"></section>
+
       <button id="tuningToggle" class="tuning-toggle" type="button" aria-label="Open tuning panel">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.12.1</p>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.13.0</p>
 
       <section id="tuningPanel" class="tuning-panel" aria-hidden="true">
         <div class="tuning-card" role="dialog" aria-modal="true" aria-labelledby="tuningTitle">
@@ -40,23 +44,23 @@
       </section>
 
       <section id="startScreen" class="overlay visible">
-        <div class="card">
+        <div class="card menu-card">
           <h1>Flowline Rider</h1>
-          <p>
-            Hold while grounded to pedal and build jump charge. Release on the ground to jump. Hold while ascending to trigger
-            Superman, then release before landing to recover safely.
-          </p>
-          <button id="startButton" class="btn">Start Ride</button>
+          <p>Pick your run and chase smooth lines across the countryside.</p>
+          <div class="menu-actions">
+            <button id="easyModeButton" class="btn" type="button">Easy Mode</button>
+            <button id="riderModeButton" class="btn btn-muted" type="button">Rider Mode</button>
+          </div>
         </div>
       </section>
 
-      <section id="feedback" class="feedback" aria-live="polite"></section>
-
       <section id="gameOver" class="overlay">
         <div class="card">
-          <h2 id="gameOverTitle">Ride Complete</h2>
+          <h2>Run Complete</h2>
           <p>Final score: <strong id="finalScore">0</strong></p>
-          <button id="restartButton" class="btn">Ride Again</button>
+          <p>Best combo: <strong id="bestCombo">x1</strong></p>
+          <button id="restartButton" class="btn" type="button">Restart</button>
+          <button id="menuButton" class="btn btn-muted" type="button">Return to Menu</button>
         </div>
       </section>
     </main>
