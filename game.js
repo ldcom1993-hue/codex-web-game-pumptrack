@@ -4,7 +4,10 @@ const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
 const totalScore = document.getElementById("totalScore");
 const timerValue = document.getElementById("timerValue");
+const comboBankValue = document.getElementById("comboBankValue");
 const comboBubble = document.getElementById("comboBubble");
+const distanceValue = document.getElementById("distanceValue");
+const speedValue = document.getElementById("speedValue");
 const floatingLayer = document.getElementById("floatingLayer");
 const startScreen = document.getElementById("startScreen");
 const gameOverScreen = document.getElementById("gameOver");
@@ -17,11 +20,12 @@ const riderModeButton = document.getElementById("riderModeButton");
 const restartButton = document.getElementById("restartButton");
 const menuButton = document.getElementById("menuButton");
 
-const tuningToggle = document.getElementById("tuningToggle");
-const tuningPanel = document.getElementById("tuningPanel");
-const tuningClose = document.getElementById("tuningClose");
-const tuningControls = document.getElementById("tuningControls");
-const resetTuning = document.getElementById("resetTuning");
+const menuToggle = document.getElementById("menuToggle");
+const runMenu = document.getElementById("runMenu");
+const runMenuClose = document.getElementById("runMenuClose");
+const menuRestart = document.getElementById("menuRestart");
+const menuBestScore = document.getElementById("menuBestScore");
+const menuChangeMode = document.getElementById("menuChangeMode");
 
 const MODES = {
   EASY: "easy",
@@ -30,7 +34,7 @@ const MODES = {
 
 const RUN_DURATION = 60;
 const COMBO_TIMEOUT = 1.8;
-const STORAGE_KEY = "flowline-rider-v0.13.0-tuning";
+const BEST_SCORE_KEY = "flowline-rider-v0.13.1-best-score";
 
 const physics = {
   gravity: 28,
@@ -61,37 +65,16 @@ const rider = {
   comHeight: 27,
 };
 
-const tuningDefaults = {
-  physics: {
-    gravity: 28,
-    pedalAccel: 3,
-    rollingFriction: 1.9,
-    maxSpeed: 17.2,
-  },
-  terrain: {
-    lengthMultiplier: 1,
-    hillHeightMultiplier: 1,
-    hillSpacingMultiplier: 1.19,
-  },
-  camera: {
-    followSmoothness: 1,
-    zoomLevel: 0.89,
-  },
+const terrainConfig = {
+  lengthMultiplier: 1,
+  hillHeightMultiplier: 1,
+  hillSpacingMultiplier: 1.19,
 };
 
-const tuning = structuredClone(tuningDefaults);
-
-const tuningSchema = [
-  { section: "physics", key: "gravity", label: "Gravity strength", min: 16, max: 40, step: 0.1 },
-  { section: "physics", key: "pedalAccel", label: "Pedaling acceleration", min: 3, max: 14, step: 0.1 },
-  { section: "physics", key: "rollingFriction", label: "Friction", min: 0.3, max: 2.2, step: 0.01 },
-  { section: "physics", key: "maxSpeed", label: "Max speed", min: 12, max: 40, step: 0.1 },
-  { section: "terrain", key: "lengthMultiplier", label: "Terrain length", min: 0.6, max: 1.8, step: 0.01 },
-  { section: "terrain", key: "hillHeightMultiplier", label: "Hill height multiplier", min: 0.5, max: 2, step: 0.01 },
-  { section: "terrain", key: "hillSpacingMultiplier", label: "Hill spacing multiplier", min: 0.6, max: 1.8, step: 0.01 },
-  { section: "camera", key: "followSmoothness", label: "Follow smoothness", min: 0.05, max: 1, step: 0.01 },
-  { section: "camera", key: "zoomLevel", label: "Zoom level", min: 0.8, max: 1.3, step: 0.01 },
-];
+const cameraConfig = {
+  followSmoothness: 1,
+  zoomLevel: 0.89,
+};
 
 const state = {
   mode: MODES.RIDER,
@@ -122,6 +105,11 @@ const state = {
   comboGraceTimer: 0,
   bestComboMultiplier: 1,
   displaySpeed: 0,
+  distanceMeters: 0,
+  jumpStartY: 0,
+  jumpStartX: 0,
+  jumpPeakY: 0,
+  jumpFromBump: false,
   suspension: 0,
   suspensionVel: 0,
   clock: 0,
@@ -133,7 +121,8 @@ let width = 0;
 let height = 0;
 let dpr = 1;
 let lastTime = 0;
-let tuningPanelOpen = false;
+let runMenuOpen = false;
+let bestScore = 0;
 const floatingScores = [];
 
 function isLandscape() {
@@ -159,15 +148,15 @@ function handleOrientation() {
 }
 
 function terrainY(worldX) {
-  const sampleX = worldX / tuning.terrain.lengthMultiplier;
-  const spacingScale = 1 / tuning.terrain.hillSpacingMultiplier;
+  const sampleX = worldX / terrainConfig.lengthMultiplier;
+  const spacingScale = 1 / terrainConfig.hillSpacingMultiplier;
   const base = height * 0.69;
   return (
     base +
     (Math.sin(sampleX * 0.0082 * spacingScale) * 44 +
       Math.sin(sampleX * 0.004 * spacingScale + 0.54) * 32 +
       Math.sin(sampleX * 0.0018 * spacingScale + 1.9) * 16) *
-      tuning.terrain.hillHeightMultiplier
+      terrainConfig.hillHeightMultiplier
   );
 }
 
@@ -184,86 +173,31 @@ function normalizeAngle(a) {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
-function syncPhysicsWithTuning() {
-  physics.gravity = tuning.physics.gravity;
-  physics.pedalAccel = tuning.physics.pedalAccel;
-  physics.rollingFriction = tuning.physics.rollingFriction;
-  physics.maxSpeed = tuning.physics.maxSpeed;
+function loadBestScore() {
+  const raw = localStorage.getItem(BEST_SCORE_KEY);
+  const parsed = Number(raw);
+  bestScore = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function saveTuning() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tuning));
+function saveBestScore() {
+  localStorage.setItem(BEST_SCORE_KEY, String(Math.round(bestScore)));
 }
 
-function loadTuning() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    for (const config of tuningSchema) {
-      const value = parsed?.[config.section]?.[config.key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        tuning[config.section][config.key] = Math.max(config.min, Math.min(config.max, value));
-      }
-    }
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-  }
+function refreshBestScoreButton() {
+  menuBestScore.textContent = `Best Score: ${Math.round(bestScore)}`;
 }
 
-function setTuningValue(section, key, value) {
-  tuning[section][key] = value;
-  syncPhysicsWithTuning();
-  saveTuning();
+function openRunMenu() {
+  runMenuOpen = true;
+  runMenu.classList.add("visible");
+  runMenu.setAttribute("aria-hidden", "false");
+  refreshBestScoreButton();
 }
 
-function makeTuningControl(config) {
-  const row = document.createElement("label");
-  row.className = "tuning-row";
-
-  const title = document.createElement("span");
-  title.className = "tuning-label";
-  title.textContent = config.label;
-
-  const value = document.createElement("span");
-  value.className = "tuning-value";
-
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = String(config.min);
-  slider.max = String(config.max);
-  slider.step = String(config.step);
-  slider.value = String(tuning[config.section][config.key]);
-
-  const refresh = () => {
-    value.textContent = Number(slider.value).toFixed(config.step < 0.1 ? 2 : 1);
-  };
-
-  slider.addEventListener("input", () => {
-    setTuningValue(config.section, config.key, Number(slider.value));
-    refresh();
-  });
-
-  refresh();
-  row.append(title, value, slider);
-  tuningControls.appendChild(row);
-}
-
-function buildTuningUI() {
-  tuningControls.innerHTML = "";
-  for (const config of tuningSchema) makeTuningControl(config);
-}
-
-function openTuningPanel() {
-  tuningPanelOpen = true;
-  tuningPanel.classList.add("visible");
-  tuningPanel.setAttribute("aria-hidden", "false");
-}
-
-function closeTuningPanel() {
-  tuningPanelOpen = false;
-  tuningPanel.classList.remove("visible");
-  tuningPanel.setAttribute("aria-hidden", "true");
+function closeRunMenu() {
+  runMenuOpen = false;
+  runMenu.classList.remove("visible");
+  runMenu.setAttribute("aria-hidden", "true");
 }
 
 function resetCombo() {
@@ -299,6 +233,11 @@ function resetRun(mode = state.mode) {
   state.totalScore = 0;
   state.bestComboMultiplier = 1;
   state.displaySpeed = 0;
+  state.distanceMeters = 0;
+  state.jumpStartY = state.riderY;
+  state.jumpStartX = state.worldX;
+  state.jumpPeakY = state.riderY;
+  state.jumpFromBump = false;
   state.suspension = 0;
   state.suspensionVel = 0;
   state.clock = 0;
@@ -306,6 +245,7 @@ function resetRun(mode = state.mode) {
   floatingScores.length = 0;
   floatingLayer.innerHTML = "";
 
+  closeRunMenu();
   resetCombo();
   updateHud();
   startScreen.classList.remove("visible");
@@ -316,6 +256,7 @@ function resetRun(mode = state.mode) {
 function showMenu() {
   state.running = false;
   state.over = false;
+  closeRunMenu();
   resetCombo();
   hud.classList.add("hidden");
   gameOverScreen.classList.remove("visible");
@@ -331,14 +272,20 @@ function endRun() {
   state.charge = 0;
   state.chargeRatio = 0;
 
+  if (state.totalScore > bestScore) {
+    bestScore = state.totalScore;
+    saveBestScore();
+    refreshBestScoreButton();
+  }
+
   finalScore.textContent = Math.round(state.totalScore);
   bestCombo.textContent = `x${state.bestComboMultiplier}`;
   gameOverScreen.classList.add("visible");
 }
 
-function addFloatingScore(text, worldX, worldY, payout = false) {
+function addFloatingScore(text, worldX, worldY) {
   const node = document.createElement("div");
-  node.className = `floating-score${payout ? " payout" : ""}`;
+  node.className = "floating-score";
   node.textContent = text;
   floatingLayer.appendChild(node);
 
@@ -347,8 +294,8 @@ function addFloatingScore(text, worldX, worldY, payout = false) {
     worldX,
     worldY,
     age: 0,
-    ttl: payout ? 1.2 : 1,
-    drift: payout ? 42 : 30,
+    ttl: 1,
+    drift: 30,
   });
 }
 
@@ -393,13 +340,13 @@ function payoutCombo(force = false) {
 
   const payout = state.comboBank * state.comboMultiplier;
   state.totalScore += payout;
-  addFloatingScore(`+${Math.round(payout)}`, state.worldX, state.riderY - 38, true);
+  animateComboPayout(payout);
   resetCombo();
   updateHud();
 }
 
 function onPressStart() {
-  if (!state.running || state.orientationBlocked || tuningPanelOpen) return;
+  if (!state.running || state.orientationBlocked || runMenuOpen) return;
   state.holdActive = true;
 
   if (isRiderMode() && state.airborne && !state.descending) {
@@ -423,6 +370,10 @@ function applyJumpFromCharge() {
   state.supermanBlend = 0;
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
+  state.jumpStartY = state.riderY;
+  state.jumpPeakY = state.riderY;
+  state.jumpStartX = state.worldX;
+  state.jumpFromBump = true;
   state.charge = 0;
   state.chargeRatio = 0;
 
@@ -431,7 +382,7 @@ function applyJumpFromCharge() {
 }
 
 function onPressEnd() {
-  if (!state.running || state.orientationBlocked || tuningPanelOpen) return;
+  if (!state.running || state.orientationBlocked || runMenuOpen) return;
   state.holdActive = false;
 
   if (state.airborne) {
@@ -490,6 +441,36 @@ function updateGroundPhysics(dt) {
   }
 }
 
+function computeJumpScore() {
+  const jumpHeight = Math.max(0, state.jumpStartY - state.jumpPeakY);
+  const normalizedHeight = Math.min(1, jumpHeight / 70);
+  const normalizedAirtime = Math.min(1, state.jumpAirTime / 1.2);
+  const weighted = normalizedHeight * 0.65 + normalizedAirtime * 0.35;
+  const curved = Math.pow(weighted, 0.72);
+
+  let jumpAward = 10 + curved * 40;
+  if (isRiderMode()) jumpAward += Math.min(10, state.supermanHoldTime * 9.5);
+  return Math.max(10, Math.min(50, jumpAward));
+}
+
+function animateComboPayout(payout) {
+  const source = comboBankValue.getBoundingClientRect();
+  const target = totalScore.getBoundingClientRect();
+  const node = document.createElement("div");
+  node.className = "combo-transfer";
+  node.textContent = `+${Math.round(payout)}`;
+  node.style.left = `${source.left}px`;
+  node.style.top = `${source.top}px`;
+  floatingLayer.appendChild(node);
+
+  requestAnimationFrame(() => {
+    node.style.transform = `translate(${target.left - source.left}px, ${target.top - source.top}px)`;
+    node.style.opacity = "0";
+  });
+
+  setTimeout(() => node.remove(), 560);
+}
+
 function evaluateLanding() {
   const terrain = terrainAngle(state.worldX);
   const pitchDelta = normalizeAngle(state.angle - terrain);
@@ -517,21 +498,26 @@ function evaluateLanding() {
   state.terrainAngle = terrain;
   state.suspensionVel -= 1.8;
 
-  const airTimeBase = 34 + state.jumpAirTime * 36;
-  const supermanBonus = isRiderMode() ? state.supermanHoldTime * 120 : 0;
-  const jumpAward = airTimeBase + supermanBonus;
+  const landedOnDescendingSlope = terrainSlope(state.worldX) < -0.02;
+  const validScoreJump = state.jumpFromBump && landedOnDescendingSlope;
 
-  state.comboCount += 1;
-  state.comboMultiplier = Math.max(1, state.comboCount);
-  state.bestComboMultiplier = Math.max(state.bestComboMultiplier, state.comboMultiplier);
-  state.comboBank += jumpAward;
-  state.comboGraceTimer = COMBO_TIMEOUT;
+  if (validScoreJump) {
+    const jumpAward = computeJumpScore();
+    state.comboCount += 1;
+    state.comboMultiplier = Math.max(1, state.comboCount);
+    state.bestComboMultiplier = Math.max(state.bestComboMultiplier, state.comboMultiplier);
+    state.comboBank += jumpAward;
+    state.comboGraceTimer = COMBO_TIMEOUT;
+    addFloatingScore(`+${Math.round(jumpAward)}`, state.worldX - 18, state.riderY - 30);
+  } else if (state.comboCount > 0) {
+    state.comboGraceTimer = 0;
+    payoutCombo();
+  }
 
-  addFloatingScore(`+${Math.round(jumpAward)}`, state.worldX, state.riderY - 34);
   updateComboBubble();
-
   state.supermanHoldTime = 0;
   state.jumpAirTime = 0;
+  state.jumpFromBump = false;
 
   if (state.holdActive) {
     updateCharge(0.016, true);
@@ -546,6 +532,7 @@ function updateAirPhysics(dt) {
   state.vy += physics.gravity * dt;
   state.descending = state.vy > 0;
   state.jumpAirTime += dt;
+  state.jumpPeakY = Math.min(state.jumpPeakY, state.riderY);
 
   if (!state.holdActive || isEasyMode()) state.supermanActive = false;
   if (state.supermanActive) state.supermanHoldTime += dt;
@@ -583,20 +570,24 @@ function updateSuspension(dt) {
 
 function updateHud() {
   totalScore.textContent = Math.round(state.totalScore);
-  timerValue.textContent = Math.max(0, state.timeLeft).toFixed(1);
+  comboBankValue.textContent = Math.round(state.comboBank);
+  timerValue.textContent = `${Math.max(0, state.timeLeft).toFixed(1)} s`;
+  distanceValue.textContent = `${Math.round(state.distanceMeters)} m`;
+  speedValue.textContent = `${state.displaySpeed.toFixed(1)} m/s`;
   updateComboBubble();
 }
 
 function updateCamera(dt) {
-  const t = Math.min(1, dt * 60 * tuning.camera.followSmoothness);
+  const t = Math.min(1, dt * 60 * cameraConfig.followSmoothness);
   state.cameraWorldX += (state.worldX - state.cameraWorldX) * t;
 }
 
 function update(dt) {
-  if (!state.running || state.orientationBlocked || tuningPanelOpen) return;
+  if (!state.running || state.orientationBlocked || runMenuOpen) return;
 
   state.clock += dt;
   state.timeLeft = Math.max(0, state.timeLeft - dt);
+  state.displaySpeed += (state.vx - state.displaySpeed) * Math.min(1, dt * 8);
 
   if (state.airborne) updateAirPhysics(dt);
   else updateGroundPhysics(dt);
@@ -610,6 +601,8 @@ function update(dt) {
 
   const riderTop = state.riderY - 40;
   if (riderTop < 10 && state.vy < -3.6) state.vy = -3.6;
+
+  state.distanceMeters += (state.vx * dt * 60) / 10;
 
   updateSuspension(dt);
   updateCamera(dt);
@@ -853,7 +846,7 @@ function frame(ts) {
   drawBackground();
   if (!state.orientationBlocked) {
     ctx.save();
-    const zoom = tuning.camera.zoomLevel;
+    const zoom = cameraConfig.zoomLevel;
     const cx = width * 0.5;
     const cy = height * 0.5;
     ctx.translate(cx, cy);
@@ -891,23 +884,25 @@ window.addEventListener("resize", () => {
   handleOrientation();
 });
 
-tuningToggle.addEventListener("click", () => {
-  if (tuningPanelOpen) closeTuningPanel();
-  else openTuningPanel();
+menuToggle.addEventListener("click", () => {
+  if (runMenuOpen) closeRunMenu();
+  else openRunMenu();
 });
 
-tuningClose.addEventListener("click", closeTuningPanel);
-tuningPanel.addEventListener("click", (event) => {
-  if (event.target === tuningPanel) closeTuningPanel();
+runMenuClose.addEventListener("click", closeRunMenu);
+runMenu.addEventListener("click", (event) => {
+  if (event.target === runMenu) closeRunMenu();
 });
 
-resetTuning.addEventListener("click", () => {
-  Object.assign(tuning.physics, tuningDefaults.physics);
-  Object.assign(tuning.terrain, tuningDefaults.terrain);
-  Object.assign(tuning.camera, tuningDefaults.camera);
-  syncPhysicsWithTuning();
-  saveTuning();
-  buildTuningUI();
+menuRestart.addEventListener("click", () => {
+  closeRunMenu();
+  if (state.running) resetRun(state.mode);
+});
+
+menuBestScore.addEventListener("click", refreshBestScoreButton);
+menuChangeMode.addEventListener("click", () => {
+  closeRunMenu();
+  showMenu();
 });
 
 if ("serviceWorker" in navigator) {
@@ -920,9 +915,8 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-loadTuning();
-syncPhysicsWithTuning();
-buildTuningUI();
+loadBestScore();
+refreshBestScoreButton();
 resize();
 handleOrientation();
 updateHud();
