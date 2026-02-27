@@ -21,18 +21,15 @@
 
       <section id="hud" class="hud hidden" aria-live="polite">
         <div class="hud-score" id="totalScore">0</div>
-        <div class="hud-stats" id="statsDisplay">
-          <span id="distanceValue">0 m</span>
-          <span id="speedValue">0.0 m/s</span>
-        </div>
-        <div class="combo-bubble" id="comboBubble">x1</div>
+        <div class="hud-distance" id="distanceValue">0 m</div>
+        <div class="hud-speed" id="speedValue">0.0 m/s</div>
         <div class="hud-timer" id="timerValue">60.0 s</div>
       </section>
 
       <section id="floatingLayer" class="floating-layer" aria-hidden="true"></section>
 
       <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open run menu">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.13.2</p>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.14.0</p>
 
       <section id="runMenu" class="run-menu" aria-hidden="true">
         <div class="run-menu-card" role="dialog" aria-modal="true" aria-labelledby="runMenuTitle">
@@ -63,7 +60,6 @@
         <div class="card">
           <h2>Run Complete</h2>
           <p>Final score: <strong id="finalScore">0</strong></p>
-          <p>Best combo: <strong id="bestCombo">x1</strong></p>
           <button id="restartButton" class="btn" type="button">Restart</button>
           <button id="menuButton" class="btn btn-muted" type="button">Return to Menu</button>
         </div>
