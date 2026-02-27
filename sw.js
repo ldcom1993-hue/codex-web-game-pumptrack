@@ -1,6 +1,6 @@
-const CACHE_VERSION = "v20";
+const CACHE_VERSION = "v19";
 const CACHE_NAME = `pump-flow-${CACHE_VERSION}`;
-const CORE_ASSETS = ["./", "./index.html", "./styles.css", "./game.js", "./manifest.webmanifest", "./assets/icon.svg", "./assets/sprites/rider_base.png"];
+const CORE_ASSETS = ["./", "./index.html", "./styles.css", "./game.js", "./manifest.webmanifest", "./assets/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
