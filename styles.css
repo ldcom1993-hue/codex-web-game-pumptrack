@@ -57,43 +57,26 @@ body {
 }
 
 
-.hud-stats {
+.hud-distance,
+.hud-speed {
   position: absolute;
-  top: calc(env(safe-area-inset-top) + 72px);
-  left: calc(env(safe-area-inset-left) + 12px);
-  display: grid;
-  gap: 6px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 12px;
-  background: rgba(10, 14, 28, 0.48);
-  border: 1px solid rgba(236, 243, 255, 0.15);
-  font-size: clamp(0.82rem, 2vw, 0.95rem);
-  color: rgba(236, 243, 255, 0.93);
+  background: rgba(10, 14, 28, 0.42);
+  border: 1px solid rgba(236, 243, 255, 0.14);
+  font-size: clamp(0.8rem, 1.9vw, 0.92rem);
+  color: rgba(236, 243, 255, 0.9);
+  letter-spacing: 0.02em;
 }
 
-.combo-bubble {
-  position: absolute;
+.hud-distance {
+  top: calc(env(safe-area-inset-top) + 14px);
   left: calc(env(safe-area-inset-left) + 12px);
-  bottom: calc(env(safe-area-inset-bottom) + 12px);
-  min-width: 44px;
-  min-height: 44px;
-  padding: 8px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  font-size: 1rem;
-  font-weight: 700;
-  background: rgba(21, 28, 51, 0.8);
-  border: 1px solid rgba(236, 243, 255, 0.2);
-  box-shadow: var(--shadow);
-  opacity: 0;
-  transform: scale(0.9);
-  transition: opacity 220ms ease, transform 220ms ease;
 }
 
-.combo-bubble.visible {
-  opacity: 1;
-  transform: scale(1);
+.hud-speed {
+  top: calc(env(safe-area-inset-top) + 14px);
+  right: calc(env(safe-area-inset-right) + 62px);
 }
 
 .hud-timer {
