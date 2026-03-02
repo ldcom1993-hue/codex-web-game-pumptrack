@@ -23,7 +23,15 @@ const runMenu = document.getElementById("runMenu");
 const runMenuClose = document.getElementById("runMenuClose");
 const menuRestart = document.getElementById("menuRestart");
 const menuBestScore = document.getElementById("menuBestScore");
+const menuRealisticStats = document.getElementById("menuRealisticStats");
 const menuChangeMode = document.getElementById("menuChangeMode");
+
+const realisticStatsModal = document.getElementById("realisticStatsModal");
+const targetScore = document.getElementById("targetScore");
+const targetDistance = document.getElementById("targetDistance");
+const targetSpeed = document.getElementById("targetSpeed");
+const launchTargetRun = document.getElementById("launchTargetRun");
+const closeTargetRun = document.getElementById("closeTargetRun");
 
 const MODES = {
   EASY: "easy",
@@ -31,7 +39,7 @@ const MODES = {
 };
 
 const RUN_DURATION = 60;
-const BEST_SCORE_KEY = "flowline-rider-v0.15.1-best-score";
+const BEST_SCORE_KEY = "flowline-rider-v0.15.2-best-score";
 
 const PARALLAX = {
   hillsSpeed: 0.16,
@@ -260,6 +268,38 @@ function refreshBestScoreButton() {
   menuBestScore.textContent = `Best Score: ${Math.round(bestScore)}`;
 }
 
+
+function buildRealisticTargetStats() {
+  const modeSpeedRatio = isRiderMode() ? 0.74 : 0.79;
+  const targetAvgSpeed = Math.max(physics.minSpeed, Math.min(physics.maxSpeed, physics.maxSpeed * modeSpeedRatio));
+  const targetDistanceMeters = Math.round((targetAvgSpeed * RUN_DURATION * 60) / 10);
+
+  const jumpPotential = Math.round((isRiderMode() ? 10.5 : 11.5) * (isRiderMode() ? 36 : 32));
+  const baselineScore = Math.round(jumpPotential + targetDistanceMeters * (isRiderMode() ? 0.12 : 0.1));
+  const smoothedHigh = Math.round(bestScore > 0 ? bestScore * 0.92 : baselineScore);
+  const targetScoreValue = Math.max(baselineScore, smoothedHigh);
+
+  return {
+    targetScoreValue,
+    targetDistanceMeters,
+    targetAvgSpeed,
+  };
+}
+
+function openRealisticStatsModal() {
+  const target = buildRealisticTargetStats();
+  targetScore.textContent = String(target.targetScoreValue);
+  targetDistance.textContent = `${target.targetDistanceMeters} m`;
+  targetSpeed.textContent = `${target.targetAvgSpeed.toFixed(1)} m/s`;
+  realisticStatsModal.classList.add("visible");
+  realisticStatsModal.setAttribute("aria-hidden", "false");
+}
+
+function closeRealisticStatsModal() {
+  realisticStatsModal.classList.remove("visible");
+  realisticStatsModal.setAttribute("aria-hidden", "true");
+}
+
 function openRunMenu() {
   runMenuOpen = true;
   runMenu.classList.add("visible");
@@ -321,6 +361,7 @@ function resetRun(mode = state.mode) {
   floatingLayer.innerHTML = "";
 
   closeRunMenu();
+  closeRealisticStatsModal();
   updateHud();
   startScreen.classList.remove("visible");
   gameOverScreen.classList.remove("visible");
@@ -1338,6 +1379,18 @@ menuRestart.addEventListener("click", () => {
 });
 
 menuBestScore.addEventListener("click", refreshBestScoreButton);
+menuRealisticStats.addEventListener("click", () => {
+  closeRunMenu();
+  openRealisticStatsModal();
+});
+launchTargetRun.addEventListener("click", () => {
+  closeRealisticStatsModal();
+  resetRun(state.mode);
+});
+closeTargetRun.addEventListener("click", closeRealisticStatsModal);
+realisticStatsModal.addEventListener("click", (event) => {
+  if (event.target === realisticStatsModal) closeRealisticStatsModal();
+});
 menuChangeMode.addEventListener("click", () => {
   closeRunMenu();
   showMenu();

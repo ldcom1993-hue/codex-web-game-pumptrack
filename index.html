@@ -29,7 +29,7 @@
       <section id="floatingLayer" class="floating-layer" aria-hidden="true"></section>
 
       <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open run menu">⚙</button>
-      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.15.1</p>
+      <p id="versionBadge" class="version-badge" aria-label="Game version">v0.15.2</p>
 
       <section id="runMenu" class="run-menu" aria-hidden="true">
         <div class="run-menu-card" role="dialog" aria-modal="true" aria-labelledby="runMenuTitle">
@@ -40,8 +40,20 @@
           <div class="run-menu-actions">
             <button id="menuRestart" class="btn" type="button">Restart</button>
             <button id="menuBestScore" class="btn btn-muted" type="button">Best Score: 0</button>
+            <button id="menuRealisticStats" class="btn btn-muted" type="button">Objectif réaliste</button>
             <button id="menuChangeMode" class="btn btn-muted" type="button">Change Mode</button>
           </div>
+        </div>
+      </section>
+
+      <section id="realisticStatsModal" class="overlay" aria-hidden="true">
+        <div class="card finish-card" role="dialog" aria-modal="true" aria-labelledby="realisticStatsTitle">
+          <h2 id="realisticStatsTitle">Objectif réaliste</h2>
+          <p class="finish-stat">Score cible <strong id="targetScore">0</strong></p>
+          <p class="finish-stat finish-distance">Distance cible <strong id="targetDistance">0 m</strong></p>
+          <p class="finish-stat">Vitesse moyenne visée <strong id="targetSpeed">0.0 m/s</strong></p>
+          <button id="launchTargetRun" class="btn" type="button">Lancer ce défi</button>
+          <button id="closeTargetRun" class="btn btn-muted" type="button">Fermer</button>
         </div>
       </section>
 
